@@ -155,13 +155,24 @@ uint32_t sys_tick_delta_32(int64_t *reftime)
 
 static inline void handle_expired_nano_timeouts(int32_t ticks)
 {
+	sys_dlist_t *timeout_q = &_nanokernel.timeout_q;
 	struct _nano_timeout *head =
-		(struct _nano_timeout *)sys_dlist_peek_head(&_nanokernel.timeout_q);
+		(struct _nano_timeout *)sys_dlist_peek_head(timeout_q);
 
 	_nanokernel.task_timeout = TICKS_UNLIMITED;
-	if (head) {
-		head->delta_ticks_from_prev -= ticks;
-		_nano_timeout_handle_timeouts();
+
+	while (head) {
+		if (ticks < head->delta_ticks_from_prev) {
+			head->delta_ticks_from_prev -= ticks;
+			break;
+		} else {
+			/* Handle the case where the timer has already expired
+			 * compared to the anounced ticks.
+			 * */
+			ticks -= head->delta_ticks_from_prev;
+			head->delta_ticks_from_prev = 0;
+			head = _nano_timeout_handle_one_timeout(timeout_q);
+		}
 	}
 }
 #else
@@ -173,13 +184,21 @@ static inline void handle_expired_nano_timeouts(int32_t ticks)
 #include <sys_clock.h>
 static inline void handle_expired_nano_timers(int ticks)
 {
-	if (_nano_timer_list) {
-		_nano_timer_list->ticks -= ticks;
-
-		while (_nano_timer_list && (!_nano_timer_list->ticks)) {
+	while (_nano_timer_list) {
+		if (ticks < _nano_timer_list->ticks) {
+			/* Likely case: anounced ticks is inferior to the first
+			 * timer expiration. Safely update the expiration. */
+			_nano_timer_list->ticks -= ticks;
+			break;
+		} else {
+			/* Corner case: the timer has already expired compared
+			 * to the anounced ticks. */
+			/* Update the ticks to update next timer in the list as
+			 * it may have expired too. */
+			ticks -= _nano_timer_list->ticks;
+			_nano_timer_list->ticks = 0;
 			struct nano_timer *expired = _nano_timer_list;
 			struct nano_lifo *lifo = &expired->lifo;
-
 			_nano_timer_list = expired->link;
 			nano_isr_lifo_put(lifo, expired->userData);
 		}
