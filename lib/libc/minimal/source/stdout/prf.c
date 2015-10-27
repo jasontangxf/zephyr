@@ -527,7 +527,9 @@ int _prf(int (*func)(), void *dest, char *format, va_list vargs)
 	int32_t			*int32ptr_temp;
 	int32_t			int32_temp;
 	uint32_t			uint32_temp;
+#ifdef CONFIG_MINIMAL_LIBC_PRINTF_FLOAT_SUPPORT
 	uint32_t			double_temp[2];
+#endif
 
 	count = 0;
 
@@ -653,6 +655,7 @@ int _prf(int (*func)(), void *dest, char *format, va_list vargs)
 					pad = ' ';
 				break;
 
+#ifdef CONFIG_MINIMAL_LIBC_PRINTF_FLOAT_SUPPORT
 			case 'e':
 			case 'E':
 			case 'f':
@@ -684,6 +687,7 @@ int _prf(int (*func)(), void *dest, char *format, va_list vargs)
 					prefix = 1;
 				need_justifying = true;
 				break;
+#endif
 
 			case 'n':
 				int32ptr_temp = (int32_t *)va_arg(vargs, int32_t *);

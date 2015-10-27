@@ -135,6 +135,12 @@ config MINIMAL_LIBC_EXTENDED
         use any of the functions in an application you probably should be
         linking against a full lib c implementation instead.
 
+config MINIMAL_LIBC_PRINTF_FLOAT_SUPPORT
+	bool
+	prompt "Support printf-ing float and doubles"
+	default y
+	depends on MINIMAL_LIBC
+
 endmenu
 
 menu "Debugging Options"
