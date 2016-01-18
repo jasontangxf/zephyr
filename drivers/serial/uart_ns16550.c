@@ -644,6 +644,41 @@ static int uart_ns16550_drv_cmd(struct device *dev, uint32_t cmd, uint32_t p)
 
 #endif /* CONFIG_UART_NS16550_DRV_CMD */
 
+/* TODO: this could be used as a candidate suspend implementation
+ * when power management is merged to mainline */
+int uart_ns16550_suspend(struct device* dev)
+{
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+	/* Disable UART (set RTS/DTR) */
+	uart_ns16550_line_ctrl_set(dev, LINE_CTRL_RTS, 0);
+	uart_ns16550_line_ctrl_set(dev, LINE_CTRL_DTR, 0);
+#endif
+	if ((LSR(dev) & LSR_RXRDY) != 0x00) {
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+		/* enable UART RTS/DTR control signals */
+		uart_ns16550_line_ctrl_set(dev, LINE_CTRL_RTS, 1);
+		uart_ns16550_line_ctrl_set(dev, LINE_CTRL_DTR, 1);
+#endif
+		return -1;
+	}
+	return 0;
+}
+
+/* TODO: this could be used as a candidate resume implementation
+ * when power management is merged to mainline */
+int uart_ns16550_resume(struct device* dev)
+{
+	/* Re-init hardware */
+	uart_ns16550_init(dev);
+	
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+	/* enable UART RTS/DTR control signals */
+	uart_ns16550_line_ctrl_set(dev, LINE_CTRL_RTS, 1);
+	uart_ns16550_line_ctrl_set(dev, LINE_CTRL_DTR, 1);
+#endif
+	return 0;
+}
+
 
 static struct uart_driver_api uart_ns16550_driver_api = {
 	.poll_in = uart_ns16550_poll_in,
