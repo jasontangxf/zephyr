@@ -24,12 +24,14 @@
 #include <nanokernel.h>
 #include "soc.h"
 #include <init.h>
+#ifdef CONFIG_ARC_INIT
 #include <quark_se/shared_mem.h>
-
+#endif
 /* Cannot use microkernel, since only nanokernel is supported */
 #if defined(CONFIG_MICROKERNEL)
 #error "Microkernel support is not available"
 #endif
+
 
 /**
  *
@@ -45,7 +47,10 @@ static int quark_se_arc_init(struct device *arg)
 	ARG_UNUSED(arg);
 
 	_arc_v2_irq_unit_init();
+#ifdef CONFIG_ARC_INIT
 	shared_data->flags |= ARC_READY;
+#endif
+
 	return 0;
 }
 

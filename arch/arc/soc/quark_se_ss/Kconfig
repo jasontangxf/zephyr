@@ -44,9 +44,16 @@ config RAM_SIZE
 	default 16 if NSIM
 	default 24
 
+config ARC_INIT
+	bool "Quark SE ARC Kickoff"
+	default n
+	help
+	Allows x86 processor to kickoff the ARC slave processor.
+
 if GPIO
 config GPIO_DW
 	def_bool y
+
 config GPIO_DW_BOTHEDGES_SUPPORT
 	default n
 

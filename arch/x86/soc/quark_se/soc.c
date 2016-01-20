@@ -28,9 +28,10 @@
 #include "soc.h"
 #include <uart.h>
 #include <init.h>
-#include "shared_mem.h"
 
 #ifdef CONFIG_ARC_INIT
+#include "shared_mem.h"
+
 #define SCSS_REG_VAL(offset) \
 	(*((volatile uint32_t *)(SCSS_REGISTER_BASE+offset)))
 
