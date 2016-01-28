@@ -1,0 +1,7 @@
+
+if BOARD_QUARK_SE_SSS_CRB
+
+config BOARD
+        default "quark_se_sss_crb"
+
+endif # BOARD_QUARK_SE_SSS_CRB

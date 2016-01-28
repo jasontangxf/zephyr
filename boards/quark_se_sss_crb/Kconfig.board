@@ -1,0 +1,5 @@
+
+config  BOARD_QUARK_SE_SSS_CRB
+        bool "Quark SE Curie Reference Board - Sensor Sub System"
+        select SOC_QUARK_SE_SS
+	depends on ARC
