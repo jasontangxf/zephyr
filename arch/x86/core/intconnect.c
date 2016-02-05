@@ -145,6 +145,9 @@ struct dyn_irq_info {
 	void (*handler)(void *param);
 	/** Parameter to pass to the handler */
 	void *param;
+	unsigned int vector;
+	unsigned int priority;
+	unsigned int irq;
 };
 
 /*
@@ -214,6 +217,24 @@ int irq_connect_dynamic(unsigned int irq, unsigned int priority,
 	int stub_idx;
 
 	/*
+	 * Check if the same IRQ was already connected before, in such as case,
+	 * simply re-connect the existing stub.
+	 */
+	int i;
+	for (i=0; i<next_irq_stub; ++i)
+	{
+		if (dyn_irq_list[i].irq == irq)
+		{
+			__ASSERT(dyn_irq_list[i].priority == priority, "Non consistent priority");
+			dyn_irq_list[i].handler = routine;
+			dyn_irq_list[i].param = parameter;
+			_SysIntVecProgram(dyn_irq_list[i].vector, irq, flags);
+			_IntVecSet(dyn_irq_list[i].vector, _get_dynamic_stub(i, &_DynIntStubsBegin), 0);
+			return dyn_irq_list[i].vector;
+		}
+	}
+
+	/*
 	 * Invoke the interrupt controller routine _SysIntVecAlloc() which will:
 	 *  a) allocate a vector satisfying the requested priority,
 	 *  b) create a new entry in the dynamic stub array
@@ -244,11 +265,13 @@ int irq_connect_dynamic(unsigned int irq, unsigned int priority,
 
 	dyn_irq_list[stub_idx].handler = routine;
 	dyn_irq_list[stub_idx].param = parameter;
+	dyn_irq_list[stub_idx].vector = vector;
+	dyn_irq_list[stub_idx].irq = irq;
+	dyn_irq_list[stub_idx].priority = priority;
 	_IntVecSet(vector, _get_dynamic_stub(stub_idx, &_DynIntStubsBegin), 0);
 
 	return vector;
 }
-
 
 /**
  * @brief Common dynamic IRQ handler function
@@ -291,6 +314,7 @@ void _irq_handler_set(unsigned int vector, void (*routine)(void *parameter),
 
 	dyn_irq_list[stub_idx].handler = routine;
 	dyn_irq_list[stub_idx].param = parameter;
+	dyn_irq_list[stub_idx].vector = vector;
 	irq_unlock(key);
 }
 
@@ -397,6 +421,30 @@ int _IntVecAlloc(unsigned int priority)
 	vector = (entryToScan << 5) + fsb;
 
 	return vector;
+}
+
+extern unsigned char _irq_to_interrupt_vector[];
+/**
+ * @brief Convert a statically connected IRQ to its interrupt vector number
+ *
+ * @param irq IRQ number
+ */
+#define _IRQ_TO_INTERRUPT_VECTOR(irq)                       \
+			((unsigned int) _irq_to_interrupt_vector[irq])
+
+/**
+ * Reconnect all previously connected ISR
+ * This is useful on a SOC resume phase when RAM was preserved but not IRQ
+ * controller state.
+ */
+void irq_resume()
+{
+	/* Static interrupts simply need to be reconnected */
+	int i;
+	for (i = 0; i < 32; i++) {
+		_SysIntVecProgram(_IRQ_TO_INTERRUPT_VECTOR(i), i, 0);
+	}
+	/* Dynamic interrupts need to be re-declared on resume */
 }
 
 /**
