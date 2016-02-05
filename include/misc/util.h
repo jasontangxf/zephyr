@@ -30,6 +30,8 @@ extern "C" {
 
 #ifndef _ASMLANGUAGE
 
+#include <stddef.h>
+
 /* Helper to pass a int as a pointer or vice-versa.
  * Those are available for 32 bits architectures:
  */
