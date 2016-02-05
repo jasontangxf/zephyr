@@ -249,6 +249,27 @@ unsigned char _sys_power_save_flag = 1;
 extern void nano_cpu_set_idle(int32_t ticks);
 
 #if defined(CONFIG_TICKLESS_IDLE)
+
+/**
+ * Extern hook that allows to go to deep sleep
+ * This should return 0 if deep sleep was not entered,
+ * or the elapsed number of ticks during deep sleep.
+ */
+__attribute__((weak)) int32_t _tickless_idle_hook(int32_t ticks)
+{
+	return 0;
+}
+
+/**
+ * Extern hook that is called on return from wakeup
+ * interrupt that returns the actual number of ticks
+ * spent in deep sleep.
+ */
+__attribute__((weak)) int32_t _tickless_idle_hook_exit()
+{
+	return 0;
+}
+
 /*
  * Idle time must be this value or higher for timer to go into tickless idle
  * state.
@@ -270,11 +291,19 @@ void _sys_power_save_idle(int32_t ticks)
 {
 #if defined(CONFIG_TICKLESS_IDLE)
 	if ((ticks == TICKS_UNLIMITED) || ticks >= _sys_idle_threshold_ticks) {
+
+		/* Try deepsleep first */
+		nano_cpu_set_idle(ticks);
+		if (_tickless_idle_hook(ticks)) {
+			return;
+		}
+		nano_cpu_set_idle(0);
+
 		/*
-		 * Stop generating system timer interrupts until it's time for
+		 * deepsleep not available, configure system timer to
+		 * stop generating system timer interrupts until it's time for
 		 * the next scheduled microkernel timer to expire.
 		 */
-
 		_timer_idle_enter(ticks);
 	}
 #endif /* CONFIG_TICKLESS_IDLE */
@@ -312,9 +341,17 @@ void _sys_power_save_idle_exit(int32_t ticks)
 {
 #ifdef CONFIG_TICKLESS_IDLE
 	if ((ticks == TICKS_UNLIMITED) || ticks >= _sys_idle_threshold_ticks) {
-		/* Resume normal periodic system timer interrupts */
-
-		_timer_idle_exit();
+		/* Check deepsleep first */
+		uint32_t deepsleep_ticks = _tickless_idle_hook_exit();
+		if (deepsleep_ticks) {
+			/* Deepsleep cycle is done, notify the kernel */
+			extern int32_t _sys_idle_elapsed_ticks;
+			_sys_idle_elapsed_ticks = deepsleep_ticks;
+			_sys_clock_tick_announce();
+		} else {
+			/* Resume normal periodic system timer interrupts */
+			_timer_idle_exit();
+		}
 	}
 #else
 	ARG_UNUSED(ticks);
