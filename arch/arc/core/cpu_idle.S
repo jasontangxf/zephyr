@@ -80,8 +80,22 @@ SECTION_FUNC(TEXT, nano_cpu_atomic_idle)
 
 	enter_tickless_idle
 
+	push_s blink
+	st.a r0,[sp,-4]
+	st.a fp,[sp,-4]
+	mov_s fp,sp
+	bl _idle_hook
+	mov_s r2, r0
+	ld.ab fp,[sp,4]
+	ld.ab r0,[sp,4]
+	pop_s blink
+	breq r2, 0, _idle_exit
+
 	ld r1, [nano_cpu_sleep_mode]
 	or r1, r1, (1 << 4) /* set IRQ-enabled bit */
 	sleep r1
+
+.balign 4
+_idle_exit:
 	j_s.d [blink]
 	seti r0

@@ -78,8 +78,8 @@
 #define _ARC_V2_TMR_CTRL_IP 0x8 /* interrupt pending flag */
 
 /* running total of timer count */
-static uint32_t __noinit cycles_per_tick;
-static uint32_t accumulated_cycle_count;
+uint32_t __noinit cycles_per_tick;
+uint32_t accumulated_cycle_count;
 
 #ifdef CONFIG_TICKLESS_IDLE
 static uint32_t __noinit max_system_ticks;
