@@ -82,7 +82,7 @@ extern "C" {
 		.config_info = (cfg_info) \
 	}; \
 	\
-	static struct device (__device_##dev_name) __used \
+	struct device (__device_##dev_name) __used \
 	__attribute__((__section__(".init_" #level STRINGIFY(prio)))) = { \
 		 .config = &(__config_##dev_name), \
 		 .driver_data = data \
