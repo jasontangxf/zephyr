@@ -1,0 +1,8 @@
+
+
+if BOARD_QUARK_SE_ORB
+
+config BOARD
+        default "quark_se_orb"
+
+endif # BOARD_QUARK_SE_ORB
