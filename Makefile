@@ -688,7 +688,7 @@ LDFLAGS_zephyr += $(call ld-option,-N)
 LDFLAGS_zephyr += $(call ld-option,--gc-sections)
 LDFLAGS_zephyr += $(call ld-option,--build-id=none)
 
-LD_TOOLCHAIN ?= -D__GCC_LINKER_CMD__
+LD_TOOLCHAIN ?= -D__GCC_LINKER_CMD__ -D__IAMCU
 
 ifdef CONFIG_HAVE_CUSTOM_LINKER_SCRIPT
 KBUILD_LDS         := $(subst $(DQUOTE),,$(CONFIG_CUSTOM_LINKER_SCRIPT))
@@ -740,8 +740,8 @@ export ALL_LIBS
 
 LINK_LIBS := $(foreach l,$(ALL_LIBS), -l$(l))
 
-OUTPUT_FORMAT ?= elf32-i386
-OUTPUT_ARCH ?= i386
+OUTPUT_FORMAT ?= elf32-iamcu
+OUTPUT_ARCH ?= iamcu:intel
 
 quiet_cmd_create-lnk = LINK    $@
       cmd_create-lnk =								\
