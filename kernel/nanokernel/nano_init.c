@@ -80,7 +80,8 @@ char __noinit __stack main_task_stack[CONFIG_MAIN_STACK_SIZE];
  * nanokernel context switches to the background (or idle) task.
  */
 
-char __noinit _interrupt_stack[CONFIG_ISR_STACK_SIZE];
+char __attribute__((section(CONFIG_ISR_STACK_SECTION))) 
+	_interrupt_stack[CONFIG_ISR_STACK_SIZE];
 
 #ifdef CONFIG_NANO_TIMEOUTS
 	#include <misc/dlist.h>
