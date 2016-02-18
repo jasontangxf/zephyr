@@ -152,7 +152,7 @@ typedef struct s_isrList {
  */
 
 #define NANO_CPU_INT_REGISTER(r, n, p, v, d) \
-	 ISR_LIST __attribute__((section(".intList"))) MK_ISR_NAME(r) = \
+	 ISR_LIST __attribute__((section(".intList#"))) MK_ISR_NAME(r) = \
 			{&r, n, p, v, d}
 
 
