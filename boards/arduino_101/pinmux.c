@@ -1,7 +1,7 @@
 /* pinmux.c - general pinmux operation */
 
 /*
- * Copyright (c) 2015 Intel Corporation
+ * Copyright (c) 2015-16 Intel Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,23 +21,8 @@
 #include <pinmux.h>
 #include <sys_io.h>
 #include "pinmux/pinmux.h"
+#include "quark_se_pinmux_common.h"
 
-
-#ifndef CONFIG_PINMUX_DEV
-#define PRINT(...) {; }
-#else
-#if defined(CONFIG_PRINTK)
-#include <misc/printk.h>
-#define PRINT printk
-#elif defined(CONFIG_STDOUT_CONSOLE)
-#define PRINT printf
-#endif /* CONFIG_PRINTK */
-#endif /*CONFIG_PINMUX_DEV */
-
-#define MASK_2_BITS             0x3
-#define PINMUX_PULLUP_OFFSET	0x00
-#define PINMUX_SLEW_OFFSET	0x10
-#define PINMUX_INPUT_OFFSET	0x20
 #define PINMUX_SELECT_OFFSET	0x30
 
 #define PINMUX_SELECT_REGISTER(base, reg_offset) \
@@ -141,43 +126,24 @@
 /* 67 D12, gpio_ss_14, clkout_32khz, NA */
 /* 68 C12, gpio_ss_15, clkout_16mhz, NA */
 
-/* Note:
- * 1. I2C pins on the shield are connected to i2c0_ss_sda and i2c_0_ss_scl,
- *    which are on the sensor subsystem. They are also tied to AD4 and AD5.
- *    Therefore, to use I2C, pin 9 (ain_9) and (ain_14) both need to be set
- *    to PINMUX_FUNC_B, so they will not interfere with I2C operations.
- *    Also, there is no internal pull-up on I2c bus, and thus external
- *    pull-up resistors are needed.
- * 2. IO3/PWM0 is connected to pin 51 and 63.
- * 3. IO5/PWM1 is connected to pin 49 and 64.
- */
+static uint32_t mux_config[PINMUX_MAX_REGISTERS] = { 0, 0, 0, 0, 0};
 
-/*
- * On the QUARK_SE platform there are a minimum of 69 pins that can be possibly
- * set.  This would be a total of 5 registers to store the configuration as per
- * the bit description from above
- */
-#define PINMUX_MAX_REGISTERS	5
+struct pinmux_config board_pmux = {
+	.base_address = CONFIG_PINMUX_BASE,
+};
 
-static void _pinmux_defaults(uint32_t base)
+int pinmux_initialize(struct device *port)
 {
-	uint32_t mux_config[PINMUX_MAX_REGISTERS] = { 0, 0, 0, 0, 0 };
-	int i = 0;
+	int i=0;
+
+	quark_se_pinmux_initialize_common(port, mux_config);
 
 	PIN_CONFIG(mux_config,  0,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config,  1,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config,  2,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config,  3,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config,  4,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config,  5,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config,  7,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config,  8,  PINMUX_FUNC_C);
-	PIN_CONFIG(mux_config,  9,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config, 14,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config, 16,  PINMUX_FUNC_C);
-	PIN_CONFIG(mux_config, 17,  PINMUX_FUNC_C);
-	PIN_CONFIG(mux_config, 40,  PINMUX_FUNC_B);
-	PIN_CONFIG(mux_config, 41,  PINMUX_FUNC_B);
+	PIN_CONFIG(mux_config,  9,  PINMUX_FUNC_C);
 	PIN_CONFIG(mux_config, 55,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config, 56,  PINMUX_FUNC_B);
 	PIN_CONFIG(mux_config, 57,  PINMUX_FUNC_B);
@@ -187,180 +153,10 @@ static void _pinmux_defaults(uint32_t base)
 	PIN_CONFIG(mux_config, 66,  PINMUX_FUNC_B);
 
 	for (i = 0; i < PINMUX_MAX_REGISTERS; i++) {
-		PRINT("PINMUX: configuring register i=%d reg=%x", i,
-		      mux_config[i]);
-		sys_write32(mux_config[i], PINMUX_SELECT_REGISTER(base, i));
+		sys_write32(mux_config[i], PINMUX_SELECT_REGISTER(board_pmux.base_address, i));
 	}
-}
-
-static uint32_t _quark_se_set_mux(uint32_t base, uint32_t pin, uint8_t func)
-{
-	/*
-	 * the registers are 32-bit wide, but each pin requires 1 bit
-	 * to set the input enable bit.
-	 */
-	uint32_t register_offset = (pin / 32) * 4;
-	/*
-	 * Now figure out what is the full address for the register
-	 * we are looking for.  Add the base register to the register_mask
-	 */
-	volatile uint32_t *mux_register = (uint32_t *)(base + register_offset);
-
-	/*
-	 * Finally grab the pin offset within the register
-	 */
-	uint32_t pin_offset = pin % 32;
-
-	/*
-	 * MAGIC NUMBER: 0x1 is used as the pullup is a single bit in a
-	 * 32-bit register.
-	 */
-	(*(mux_register)) = ((*(mux_register)) & ~(0x1 << pin_offset)) |
-		((func & 0x01) << pin_offset);
-
 	return DEV_OK;
 }
-
-static inline void _pinmux_pullups(uint32_t base_address)
-{
-	_quark_se_set_mux(base_address + PINMUX_PULLUP_OFFSET, 104,
-			  PINMUX_PULLUP_ENABLE);
-}
-
-
-#ifdef CONFIG_PINMUX_DEV
-static uint32_t pinmux_dev_set(struct device *dev, uint32_t pin, uint8_t func)
-{
-	struct pinmux_config * const pmux = dev->config->config_info;
-
-	/*
-	 * the registers are 32-bit wide, but each pin requires 2 bits
-	 * to set the mode (A, B, C, or D).  As such we only get 16
-	 * pins per register... hence the math for the register mask.
-	 */
-	uint32_t register_offset = (pin >> 4);
-	/*
-	 * Now figure out what is the full address for the register
-	 * we are looking for.  Add the base register to the register_mask
-	 */
-	volatile uint32_t *mux_register =
-		(uint32_t *)PINMUX_SELECT_REGISTER(pmux->base_address, register_offset);
-
-	/*
-	 * Finally grab the pin offset within the register
-	 */
-	uint32_t pin_no = pin % 16;
-
-	/*
-	 * The value 3 is used because that is 2-bits for the mode of each
-	 * pin.  The value 2 repesents the bits needed for each pin's mode.
-	 */
-	uint32_t pin_mask = MASK_2_BITS << (pin_no << 1);
-	uint32_t mode_mask = func << (pin_no << 1);
-	(*(mux_register)) = ((*(mux_register)) & ~pin_mask) | mode_mask;
-
-	return DEV_OK;
-}
-
-static uint32_t pinmux_dev_get(struct device *dev, uint32_t pin, uint8_t *func)
-{
-	struct pinmux_config * const pmux = dev->config->config_info;
-
-	/*
-	 * the registers are 32-bit wide, but each pin requires 2 bits
-	 * to set the mode (A, B, C, or D).  As such we only get 16
-	 * pins per register... hence the math for the register mask.
-	 */
-	uint32_t register_offset = pin >> 4;
-	/*
-	 * Now figure out what is the full address for the register
-	 * we are looking for.  Add the base register to the register_mask
-	 */
-	volatile uint32_t *mux_register =
-		(uint32_t *)PINMUX_SELECT_REGISTER(pmux->base_address, register_offset);
-
-	/*
-	 * Finally grab the pin offset within the register
-	 */
-	uint32_t pin_no = pin % 16;
-
-	/*
-	 * The value 3 is used because that is 2-bits for the mode of each
-	 * pin.  The value 2 repesents the bits needed for each pin's mode.
-	 */
-	uint32_t pin_mask = MASK_2_BITS << (pin_no << 1);
-	uint32_t mode_mask = (*(mux_register)) & pin_mask;
-	uint32_t mode = mode_mask >> (pin_no << 1);
-
-	*func = mode;
-
-	return DEV_OK;
-}
-#else
-static uint32_t pinmux_dev_set(struct device *dev, uint32_t pin, uint8_t func)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(pin);
-	ARG_UNUSED(func);
-
-	PRINT("ERROR: %s is not enabled", __func__);
-
-	return DEV_NOT_CONFIG;
-}
-
-static uint32_t pinmux_dev_get(struct device *dev, uint32_t pin, uint8_t *func)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(pin);
-	ARG_UNUSED(func);
-
-	PRINT("ERROR: %s is not enabled", __func__);
-
-	return DEV_NOT_CONFIG;
-}
-#endif /* CONFIG_PINMUX_DEV */
-
-static uint32_t pinmux_dev_pullup(struct device *dev,
-				  uint32_t pin,
-				  uint8_t func)
-{
-	struct pinmux_config * const pmux = dev->config->config_info;
-
-	_quark_se_set_mux(pmux->base_address + PINMUX_PULLUP_OFFSET, pin, func);
-
-	return DEV_OK;
-}
-static uint32_t pinmux_dev_input(struct device *dev, uint32_t pin, uint8_t func)
-{
-	struct pinmux_config * const pmux = dev->config->config_info;
-
-	_quark_se_set_mux(pmux->base_address + PINMUX_INPUT_OFFSET, pin, func);
-
-	return DEV_OK;
-}
-
-static struct pinmux_driver_api api_funcs = {
-	.set = pinmux_dev_set,
-	.get = pinmux_dev_get,
-	.pullup = pinmux_dev_pullup,
-	.input = pinmux_dev_input
-};
-
-int pinmux_initialize(struct device *port)
-{
-	struct pinmux_config * const pmux = port->config->config_info;
-
-	port->driver_api = &api_funcs;
-
-	_pinmux_defaults(pmux->base_address);
-	_pinmux_pullups(pmux->base_address);
-
-	return DEV_OK;
-}
-
-struct pinmux_config board_pmux = {
-	.base_address = CONFIG_PINMUX_BASE,
-};
 
 DEVICE_INIT(pmux, PINMUX_NAME, &pinmux_initialize,
 			NULL, &board_pmux,
