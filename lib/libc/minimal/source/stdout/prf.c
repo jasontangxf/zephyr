@@ -151,6 +151,8 @@ static int _to_dec(char *buf, int32_t value, int fplus, int fspace, int precisio
 	return (buf + _to_udec(buf, (uint32_t) value, precision)) - start;
 }
 
+#ifdef CONFIG_MINIMAL_LIBC_PRINTF_FLOAT_SUPPORT
+
 static void _llshift(uint32_t value[])
 {
 	if (value[0] & 0x80000000)
@@ -486,6 +488,8 @@ static int _to_float(char *buf, uint32_t double_temp[], int full, int c,
 
 	return buf - start;
 }
+
+#endif
 
 static int _atoi(char **sptr)
 {
