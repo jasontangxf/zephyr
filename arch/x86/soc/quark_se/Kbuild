@@ -4,3 +4,4 @@ ccflags-y +=-I$(srctree)/drivers
 asflags-y := ${ccflags-y}
 
 obj-$(CONFIG_SOC_QUARK_SE) = soc.o soc_config.o eoi.o
+obj-$(CONFIG_QUARK_SE_PINMUX_COMMON) += quark_se_pinmux_common.o

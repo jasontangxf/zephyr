@@ -375,4 +375,10 @@ config QUARK_SE_IPM_CONSOLE_RING_BUF_SIZE32
 	console messages from the ARC side. Must be a power of 2.
 endif
 
+config QUARK_SE_PINMUX_COMMON
+	bool "Pinmux Setup"
+	depends on SOC_QUARK_SE
+	help
+		Provides the default pinmux configuration for Quark SE. You
+		should call quark_se_pinmux_initialize_common() to setup the pinmux.
 endif #SOC_QUARK_SE_X86
