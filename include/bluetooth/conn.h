@@ -279,6 +279,19 @@ int bt_conn_security(struct bt_conn *conn, bt_security_t sec);
  *  @return Encryption key size.
  */
 uint8_t bt_conn_enc_key_size(struct bt_conn *conn);
+
+/** @brief Clear device information (bonding, keys).
+ *
+ *  Clears all a bonding information (keys, etc). A bonded connection is
+ *  disconnected.
+ *  BT_ADDR_LE_ANY removes the of all bonded devices
+ *
+ *  @param addr identity address of a bonded device
+ *
+ *  @return 0 in success, error code otherwise
+ *
+ */
+int bt_conn_remove_info(const bt_addr_le_t *addr);
 #endif /* CONFIG_BLUETOOTH_SMP */
 
 /** Connection callback structure */

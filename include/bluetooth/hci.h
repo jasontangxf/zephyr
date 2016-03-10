@@ -72,6 +72,7 @@ static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
 #define BT_HCI_ERR_UNSPECIFIED			0x1f
 #define BT_HCI_ERR_PAIRING_NOT_SUPPORTED	0x29
 #define BT_HCI_ERR_UNACCEPT_CONN_PARAMS		0x3b
+#define BT_HCI_ERR_DIRECTED_ADV_TIMEOUT		0x3c
 
 /* EIR/AD data type definitions */
 #define BT_DATA_FLAGS			0x01 /* AD flags */

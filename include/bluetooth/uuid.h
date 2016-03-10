@@ -97,6 +97,11 @@ struct bt_uuid_128 {
  */
 #define BT_UUID_BAS				BT_UUID_DECLARE_16(0x180f)
 #define BT_UUID_BAS_VAL				0x180f
+/** @def BT_UUID_RSCS
+ *  @brief Running Speed and Cadence Service
+ */
+#define BT_UUID_RSCS				BT_UUID_DECLARE_16(0x1814)
+#define BT_UUID_RSCS_VAL			0x1814
 /** @def BT_UUID_CSC
  *  @brief Cycling Speed and Cadence Service
  */
@@ -112,6 +117,11 @@ struct bt_uuid_128 {
  */
 #define BT_UUID_IPSS				BT_UUID_DECLARE_16(0x1820)
 #define BT_UUID_IPSS_VAL			0x1820
+/** @def BT_UUID_LNS
+ *  @brief Location and Navigation Support Service
+ */
+#define BT_UUID_LNS				BT_UUID_DECLARE_16(0x1819)
+#define BT_UUID_LNS_VAL				0x1819
 /** @def BT_UUID_GATT_PRIMARY
  *  @brief GATT Primary Service
  */
@@ -237,6 +247,16 @@ struct bt_uuid_128 {
  */
 #define BT_UUID_DIS_PNP_ID			BT_UUID_DECLARE_16(0x2a50)
 #define BT_UUID_DIS_PNP_ID_VAL			0x2a50
+/** @def BT_UUID_RSC_MEASUREMENT
+ *  @brief RSC Characteristic measurement ID
+ */
+#define BT_UUID_RSC_MEASUREMENT			BT_UUID_DECLARE_16(0x2a53)
+#define BT_UUID_RSC_MEASUREMENT_VAL		0x2a53
+/** @def BT_UUID_RSC_FEATURE
+ *  @brief RSC Characteristic feature ID
+ */
+#define BT_UUID_RSC_FEATURE			BT_UUID_DECLARE_16(0x2a54)
+#define BT_UUID_RSC_FEATURE_VAL			0x2a54
 /** @def BT_UUID_CTS_CURRENT_TIME
  *  @brief CTS Characteristic Current Time
  */
@@ -282,6 +302,21 @@ struct bt_uuid_128 {
  */
 #define BT_UUID_SC_CONTROL_POINT		BT_UUID_DECLARE_16(0x2a55)
 #define BT_UUID_SC_CONTROL_POINT_VAl		0x2a55
+/** @def BT_UUID_LNS_CONTROL_POINT
+ *  @brief LNS Control Point Characteristic
+ */
+#define BT_UUID_LNS_CONTROL_POINT		BT_UUID_DECLARE_16(0x2a6B)
+#define BT_UUID_LNS_CONTROL_POINT_VAL		0x2a6B
+/** @def BT_UUID_LNS_LOCATION_SPEED
+ *  @brief LNS Characteristic Location and Speed
+ */
+#define BT_UUID_LNS_LOCATION_SPEED		BT_UUID_DECLARE_16(0x2a67)
+#define BT_UUID_LNS_LOCATION_SPEED_VAL		0x2a67
+/** @def BT_UUID_LNS_FEATURE
+ *  @brief LNS Characteristic Feature
+ */
+#define BT_UUID_LNS_FEATURE			BT_UUID_DECLARE_16(0x2a6a)
+#define BT_UUID_LNS_FEATURE_VAL			0x2a6a
 /** @def BT_UUID_ELEVATION
  *  @brief Elevation Characteristic
  */

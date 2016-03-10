@@ -717,6 +717,20 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
 	.user_data = _value,						\
 }
 
+/** @brief Notify sent callback
+ *
+ *  This means that the complete attribute has been sent. This does not mean it
+ *  has been received however (use indicate for this).
+ *  This shall be used to flow control the callee to avoid flooding the ble
+ *  controller.
+ *
+ *  @param conn Connection object.
+ *  @param attr Attribute object.
+ *  @param err 0 if none
+ */
+typedef void (*bt_gatt_notify_sent_func_t)(struct bt_conn *conn, struct bt_gatt_attr *attr,
+					   uint8_t err);
+
 /** @brief Notify attribute value change.
  *
  *  Send notification of attribute value change, if connection is NULL notify
@@ -727,9 +741,11 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
  *  @param attr Attribute object.
  *  @param value Attribute value.
  *  @param len Attribute value length.
+ *  @param cb callback function called when send is complete (or NULL)
  */
 int bt_gatt_notify(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-		   const void *data, uint16_t len);
+		   const void *data, uint16_t len,
+		   bt_gatt_notify_sent_func_t cb);
 
 /** @brief Indication complete result callback.
  *
@@ -910,6 +926,14 @@ struct bt_gatt_read_params {
  */
 int bt_gatt_read(struct bt_conn *conn, struct bt_gatt_read_params *params);
 
+/** @brief Write Response callback function
+ *
+ *  @param conn Connection object.
+ *  @param err  Error code.
+ *  @param data Data pointer in the write request.
+ */
+typedef void (*bt_gatt_write_rsp_func_t)(struct bt_conn *conn, uint8_t err, const void *data);
+
 /** @brief Write Attribute Value by handle
  *
  * This procedure write the attribute value and return the result in the
@@ -925,7 +949,7 @@ int bt_gatt_read(struct bt_conn *conn, struct bt_gatt_read_params *params);
  * @return 0 in case of success or negative value in case of error.
  */
 int bt_gatt_write(struct bt_conn *conn, uint16_t handle, uint16_t offset,
-		  const void *data, uint16_t length, bt_gatt_rsp_func_t func);
+		  const void *data, uint16_t length, bt_gatt_write_rsp_func_t func);
 
 /** @brief Write Attribute Value by handle without response
  *
