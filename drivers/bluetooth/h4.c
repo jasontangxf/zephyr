@@ -123,7 +123,7 @@ static struct net_buf *h4_acl_recv(int *remaining)
 	return buf;
 }
 
-void bt_uart_isr(void *unused)
+static void bt_uart_isr(struct device *unused)
 {
 	static struct net_buf *buf;
 	static int remaining;
@@ -209,8 +209,7 @@ static int h4_send(enum bt_buf_type buf_type, struct net_buf *buf)
 	}
 
 	while (buf->len) {
-		uart_poll_out(h4_dev, buf->data[0]);
-		net_buf_pull(buf, 1);
+		uart_poll_out(h4_dev, net_buf_pull_u8(buf));
 	}
 
 	net_buf_unref(buf);
@@ -224,9 +223,6 @@ static int h4_open(void)
 
 	uart_irq_rx_disable(h4_dev);
 	uart_irq_tx_disable(h4_dev);
-	IRQ_CONNECT(CONFIG_BLUETOOTH_UART_IRQ, CONFIG_BLUETOOTH_UART_IRQ_PRI,
-		    bt_uart_isr, 0, UART_IRQ_FLAGS);
-	irq_enable(CONFIG_BLUETOOTH_UART_IRQ);
 
 	/* Drain the fifo */
 	while (uart_irq_rx_ready(h4_dev)) {
@@ -234,6 +230,8 @@ static int h4_open(void)
 
 		uart_fifo_read(h4_dev, &c, 1);
 	}
+
+	uart_irq_callback_set(h4_dev, bt_uart_isr);
 
 	uart_irq_rx_enable(h4_dev);
 

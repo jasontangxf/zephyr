@@ -31,17 +31,32 @@
 #include "uart.h"
 #include "rpc.h"
 
+#if !defined(CONFIG_BLUETOOTH_DEBUG_DRIVER)
+#undef BT_DBG
+#define BT_DBG(fmt, ...)
+#endif
+
+/**
+ * @note this structure must be self-aligned and self-packed
+ */
+struct ipc_uart_header {
+	uint16_t len;		/**< Length of IPC message. */
+	uint8_t channel;	/**< Channel number of IPC message. */
+	uint8_t src_cpu_id;	/**< CPU id of IPC sender. */
+} __packed;
+
 /* TODO: check size */
-#define NBLE_IPC_COUNT	2
-#define NBLE_BUF_SIZE	384
+#define NBLE_TX_BUF_COUNT	2
+#define NBLE_RX_BUF_COUNT	8
+#define NBLE_BUF_SIZE		384
 
 static struct nano_fifo rx;
-static NET_BUF_POOL(rx_pool, NBLE_IPC_COUNT, NBLE_BUF_SIZE, &rx, NULL, 0);
+static NET_BUF_POOL(rx_pool, NBLE_RX_BUF_COUNT, NBLE_BUF_SIZE, &rx, NULL, 0);
 
 static struct nano_fifo tx;
-static NET_BUF_POOL(tx_pool, NBLE_IPC_COUNT, NBLE_BUF_SIZE, &tx, NULL, 0);
+static NET_BUF_POOL(tx_pool, NBLE_TX_BUF_COUNT, NBLE_BUF_SIZE, &tx, NULL, 0);
 
-static BT_STACK_NOINIT(rx_fiber_stack, 2048);
+static BT_STACK_NOINIT(rx_fiber_stack, CONFIG_BLUETOOTH_RX_STACK_SIZE);
 
 static struct device *nble_dev;
 
@@ -57,19 +72,19 @@ static void rx_fiber(void)
 		buf = nano_fifo_get(&rx_queue, TICKS_UNLIMITED);
 		BT_DBG("Got buf %p", buf);
 
-		rpc_deserialize(buf->data, buf->len);
+		rpc_deserialize(buf);
 
 		net_buf_unref(buf);
 	}
 }
 
-uint8_t *rpc_alloc_cb(uint16_t length)
+struct net_buf *rpc_alloc_cb(uint16_t length)
 {
 	struct net_buf *buf;
 
 	BT_DBG("length %u", length);
 
-	buf = net_buf_get(&tx, 0);
+	buf = net_buf_get(&tx, sizeof(struct ipc_uart_header));
 	if (!buf) {
 		BT_ERR("Unable to get tx buffer");
 		return NULL;
@@ -81,63 +96,25 @@ uint8_t *rpc_alloc_cb(uint16_t length)
 		return NULL;
 	}
 
-	return buf->__buf;
+	return buf;
 }
 
-static void poll_out(const void *buf, size_t length)
+void rpc_transmit_cb(struct net_buf *buf)
 {
-	const uint8_t *ptr = buf;
+	struct ipc_uart_header *hdr;
 
-	while (length--) {
-		uart_poll_out(nble_dev, *ptr++);
+	BT_DBG("buf %p length %u", buf, buf->len);
+
+	hdr = net_buf_push(buf, sizeof(*hdr));
+	hdr->len = buf->len - sizeof(*hdr);
+	hdr->channel = 0;
+	hdr->src_cpu_id = 0;
+
+	while (buf->len) {
+		uart_poll_out(nble_dev, net_buf_pull_u8(buf));
 	}
-}
-
-void rpc_transmit_cb(uint8_t *data, uint16_t length)
-{
-	struct net_buf *buf = CONTAINER_OF(data, struct net_buf, __buf);
-	struct ipc_uart_header hdr;
-
-	BT_DBG("buf %p length %u", data, length);
-
-	hdr.len = length;
-	hdr.channel = 0;
-	hdr.src_cpu_id = 0;
-
-	/* Send header */
-	poll_out(&hdr, sizeof(hdr));
-
-	/* Send data */
-	poll_out(buf->data, length);
 
 	net_buf_unref(buf);
-}
-
-static int nble_read(struct device *uart, uint8_t *buf,
-		     size_t len, size_t min)
-{
-	int total = 0;
-	int tries = 10;
-
-	while (len) {
-		int rx;
-
-		rx = uart_fifo_read(uart, buf, len);
-		if (rx == 0) {
-			BT_DBG("Got zero bytes from UART");
-			if (total < min && tries--) {
-				continue;
-			}
-			break;
-		}
-
-		BT_DBG("read %d remaining %d", rx, len - rx);
-		len -= rx;
-		total += rx;
-		buf += rx;
-	}
-
-	return total;
 }
 
 static size_t nble_discard(struct device *uart, size_t len)
@@ -148,14 +125,15 @@ static size_t nble_discard(struct device *uart, size_t len)
 	return uart_fifo_read(uart, buf, min(len, sizeof(buf)));
 }
 
-void bt_uart_isr(void *unused)
+static void bt_uart_isr(struct device *unused)
 {
 	static struct net_buf *buf;
-	static int remaining;
 
 	ARG_UNUSED(unused);
 
 	while (uart_irq_update(nble_dev) && uart_irq_is_pending(nble_dev)) {
+		static struct ipc_uart_header hdr;
+		static uint8_t hdr_bytes;
 		int read;
 
 		if (!uart_irq_rx_ready(nble_dev)) {
@@ -174,57 +152,42 @@ void bt_uart_isr(void *unused)
 			continue;
 		}
 
-		/* Beginning of a new packet */
-		if (!remaining) {
-			struct ipc_uart_header hdr;
-
+		if (hdr_bytes < sizeof(hdr)) {
 			/* Get packet type */
-			read = nble_read(nble_dev, (uint8_t *)&hdr,
-					 sizeof(hdr), sizeof(hdr));
-			if (read != sizeof(hdr)) {
-				BT_WARN("Unable to read NBLE header");
+			hdr_bytes += uart_fifo_read(nble_dev,
+						    (uint8_t *)&hdr + hdr_bytes,
+						    sizeof(hdr) - hdr_bytes);
+			if (hdr_bytes < sizeof(hdr)) {
 				continue;
 			}
 
-			remaining = hdr.len;
-
-			buf = net_buf_get(&rx, 0);
-			if (!buf) {
-				BT_ERR("No available IPC buffers");
-			}
-#if 0
-			} else {
-				memcpy(net_buf_add(buf, sizeof(hdr)), &hdr,
-				       sizeof(hdr));
-			}
-#endif
-
-			BT_DBG("need to get %u bytes", remaining);
-
-			if (buf && remaining > net_buf_tailroom(buf)) {
-				BT_ERR("Not enough space in buffer");
-				net_buf_unref(buf);
+			if (hdr.len > NBLE_BUF_SIZE) {
+				BT_ERR("Too much data to fit buffer");
 				buf = NULL;
+			} else {
+				buf = net_buf_get(&rx, 0);
+				if (!buf) {
+					BT_ERR("No available IPC buffers");
+				}
 			}
 		}
 
 		if (!buf) {
-			read = nble_discard(nble_dev, remaining);
-			BT_WARN("Discarded %d bytes", read);
-			remaining -= read;
+			hdr.len -= nble_discard(nble_dev, hdr.len);
+			if (!hdr.len) {
+				hdr_bytes = 0;
+			}
 			continue;
 		}
 
-		read = nble_read(nble_dev, net_buf_tail(buf), remaining, 0);
+		read = uart_fifo_read(nble_dev, net_buf_tail(buf), hdr.len);
 
 		buf->len += read;
-		remaining -= read;
+		hdr.len -= read;
 
-		BT_DBG("received %d bytes", read);
-
-		if (!remaining) {
+		if (!hdr.len) {
 			BT_DBG("full packet received");
-
+			hdr_bytes = 0;
 			/* Pass buffer to the stack */
 			nano_fifo_put(&rx_queue, buf);
 		}
@@ -243,16 +206,14 @@ int nble_open(void)
 	uart_irq_rx_disable(nble_dev);
 	uart_irq_tx_disable(nble_dev);
 
-	IRQ_CONNECT(CONFIG_NBLE_UART_IRQ, CONFIG_NBLE_UART_IRQ_PRI,
-		    bt_uart_isr, 0, UART_IRQ_FLAGS);
-	irq_enable(CONFIG_NBLE_UART_IRQ);
-
 	/* Drain the fifo */
 	while (uart_irq_rx_ready(nble_dev)) {
 		unsigned char c;
 
 		uart_fifo_read(nble_dev, &c, 1);
 	}
+
+	uart_irq_callback_set(nble_dev, bt_uart_isr);
 
 	uart_irq_rx_enable(nble_dev);
 

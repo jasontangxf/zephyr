@@ -18,13 +18,13 @@
 
 #if defined(CONFIG_BLUETOOTH_SMP) || defined(CONFIG_BLUETOOTH_BREDR)
 enum {
-	BT_KEYS_SLAVE_LTK      = (1 << 0),
-	BT_KEYS_IRK            = (1 << 1),
-	BT_KEYS_LTK            = (1 << 2),
-	BT_KEYS_LOCAL_CSRK     = (1 << 3),
-	BT_KEYS_REMOTE_CSRK    = (1 << 4),
-	BT_KEYS_LTK_P256       = (1 << 5),
-	BT_KEYS_LINK_KEY       = (1 << 6),
+	BT_KEYS_SLAVE_LTK      = BIT(0),
+	BT_KEYS_IRK            = BIT(1),
+	BT_KEYS_LTK            = BIT(2),
+	BT_KEYS_LOCAL_CSRK     = BIT(3),
+	BT_KEYS_REMOTE_CSRK    = BIT(4),
+	BT_KEYS_LTK_P256       = BIT(5),
+	BT_KEYS_LINK_KEY       = BIT(6),
 
 	BT_KEYS_ALL            = (BT_KEYS_SLAVE_LTK | BT_KEYS_IRK | \
 				  BT_KEYS_LTK | BT_KEYS_LOCAL_CSRK | \
@@ -35,6 +35,7 @@ enum {
 enum {
 	BT_KEYS_AUTHENTICATED,
 	BT_KEYS_BR_LEGACY,
+	BT_KEYS_DEBUG,
 };
 
 struct bt_ltk {
@@ -96,9 +97,4 @@ void bt_keys_clear(struct bt_keys *keys, int type);
 struct bt_keys *bt_keys_find(int type, const bt_addr_le_t *addr);
 struct bt_keys *bt_keys_find_irk(const bt_addr_le_t *addr);
 struct bt_keys *bt_keys_find_addr(const bt_addr_le_t *addr);
-#else
-static inline struct bt_keys *bt_keys_find_addr(const bt_addr_le_t *addr)
-{
-	return NULL;
-}
 #endif /* CONFIG_BLUETOOTH_SMP || CONFIG_BLUETOOTH_BREDR */

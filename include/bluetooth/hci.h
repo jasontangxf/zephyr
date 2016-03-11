@@ -20,6 +20,7 @@
 
 #include <toolchain.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,13 +41,35 @@ typedef struct {
 #define BT_ADDR_ANY    (&(bt_addr_t) {{0, 0, 0, 0, 0, 0} })
 #define BT_ADDR_LE_ANY (&(bt_addr_le_t) { 0, {0, 0, 0, 0, 0, 0} })
 
+static inline int bt_addr_cmp(const bt_addr_t *a, const bt_addr_t *b)
+{
+	return memcmp(a, b, sizeof(*a));
+}
+
+static inline int bt_addr_le_cmp(const bt_addr_le_t *a, const bt_addr_le_t *b)
+{
+	return memcmp(a, b, sizeof(*a));
+}
+
+static inline void bt_addr_copy(bt_addr_t *dst, const bt_addr_t *src)
+{
+	memcpy(dst, src, sizeof(*dst));
+}
+
+static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
+{
+	memcpy(dst, src, sizeof(*dst));
+}
+
 /* HCI Error Codes */
 #define BT_HCI_ERR_UNKNOWN_CONN_ID		0x02
 #define BT_HCI_ERR_AUTHENTICATION_FAIL		0x05
 #define BT_HCI_ERR_INSUFFICIENT_RESOURCES	0x0d
 #define BT_HCI_ERR_REMOTE_USER_TERM_CONN	0x13
+#define BT_HCI_ERR_PAIRING_NOT_ALLOWED		0x18
 #define BT_HCI_ERR_UNSUPP_REMOTE_FEATURE	0x1a
 #define BT_HCI_ERR_INVALID_LL_PARAMS		0x1e
+#define BT_HCI_ERR_UNSPECIFIED			0x1f
 #define BT_HCI_ERR_PAIRING_NOT_SUPPORTED	0x29
 #define BT_HCI_ERR_UNACCEPT_CONN_PARAMS		0x3b
 
@@ -105,6 +128,20 @@ struct bt_hci_cmd_hdr {
 #define BT_HCI_LE_ENCRYPTION			0x01
 #define BT_HCI_LE_CONN_PARAM_REQ_PROC		0x02
 #define BT_HCI_LE_SLAVE_FEATURES		0x08
+
+/* Bonding/authentication types */
+#define BT_HCI_NO_BONDING			0x00
+#define BT_HCI_NO_BONDING_MITM			0x01
+#define BT_HCI_DEDICATED_BONDING		0x02
+#define BT_HCI_DEDICATED_BONDING_MITM		0x03
+#define BT_HCI_GENERAL_BONDING			0x04
+#define BT_HCI_GENERAL_BONDING_MITM		0x05
+
+/* I/O capabilities */
+#define BT_IO_DISPLAY_ONLY			0x00
+#define BT_IO_DISPLAY_YESNO			0x01
+#define BT_IO_KEYBOARD_ONLY			0x02
+#define BT_IO_NO_INPUT_OUTPUT			0x03
 
 /* Defined GAP timers */
 #define BT_GAP_SCAN_FAST_INTERVAL		0x0060	/* 60 ms    */
@@ -185,6 +222,20 @@ struct bt_hci_rp_pin_code_neg_reply {
 	bt_addr_t bdaddr;
 } __packed;
 
+#define BT_HCI_OP_IO_CAPABILITY_REPLY		BT_OP(BT_OGF_LINK_CTRL, 0x002b)
+struct bt_hci_cp_io_capability_reply {
+	bt_addr_t bdaddr;
+	uint8_t   capability;
+	uint8_t   oob_data;
+	uint8_t   authentication;
+} __packed;
+
+#define BT_HCI_OP_IO_CAPABILITY_NEG_REPLY	BT_OP(BT_OGF_LINK_CTRL, 0x0034)
+struct bt_hci_cp_io_capability_neg_reply {
+	bt_addr_t bdaddr;
+	uint8_t   reason;
+} __packed;
+
 #define BT_HCI_OP_SET_EVENT_MASK		BT_OP(BT_OGF_BASEBAND, 0x0001)
 struct bt_hci_cp_set_event_mask {
 	uint8_t  events[8];
@@ -197,6 +248,7 @@ struct bt_hci_cp_set_event_mask {
 #define BT_BREDR_SCAN_INQUIRY			0x01
 #define BT_BREDR_SCAN_PAGE			0x02
 
+#define BT_HCI_CTL_TO_HOST_FLOW_ENABLE		0x01
 #define BT_HCI_OP_SET_CTL_TO_HOST_FLOW		BT_OP(BT_OGF_BASEBAND, 0x0031)
 
 #define BT_HCI_OP_HOST_BUFFER_SIZE		BT_OP(BT_OGF_BASEBAND, 0x0033)
@@ -216,6 +268,11 @@ struct bt_hci_handle_count {
 struct bt_hci_cp_host_num_completed_packets {
 	uint8_t  num_handles;
 	struct bt_hci_handle_count h[0];
+} __packed;
+
+#define BT_HCI_OP_WRITE_SSP_MODE		BT_OP(BT_OGF_BASEBAND, 0x0056)
+struct bt_hci_cp_write_ssp_mode {
+	uint8_t mode;
 } __packed;
 
 #define BT_HCI_OP_LE_WRITE_LE_HOST_SUPP		BT_OP(BT_OGF_BASEBAND, 0x006d)
@@ -315,6 +372,9 @@ struct bt_hci_cp_le_set_scan_rsp_data {
 	uint8_t  len;
 	uint8_t  data[31];
 } __packed;
+
+#define BT_HCI_LE_ADV_DISABLE			0x00
+#define BT_HCI_LE_ADV_ENABLE			0x01
 
 #define BT_HCI_OP_LE_SET_ADV_ENABLE		BT_OP(BT_OGF_LE, 0x000a)
 struct bt_hci_cp_le_set_adv_enable {
@@ -522,6 +582,25 @@ struct bt_hci_ev_link_key_notify {
 struct bt_hci_evt_encrypt_key_refresh_complete {
 	uint8_t  status;
 	uint16_t handle;
+} __packed;
+
+#define BT_HCI_EVT_IO_CAPA_REQ			0x31
+struct bt_hci_evt_io_capa_req {
+	bt_addr_t bdaddr;
+} __packed;
+
+#define BT_HCI_EVT_IO_CAPA_RESP			0x32
+struct bt_hci_evt_io_capa_resp {
+	bt_addr_t bdaddr;
+	uint8_t   capability;
+	uint8_t   oob_data;
+	uint8_t   authentication;
+} __packed;
+
+#define BT_HCI_EVT_SSP_COMPLETE			0x36
+struct bt_hci_evt_ssp_complete {
+	uint8_t   status;
+	bt_addr_t bdaddr;
 } __packed;
 
 #define BT_HCI_EVT_LE_META_EVENT		0x3e

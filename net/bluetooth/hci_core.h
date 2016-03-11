@@ -29,6 +29,7 @@ enum {
 	BT_DEV_READY,
 
 	BT_DEV_ADVERTISING,
+	BT_DEV_KEEP_ADVERTISING,
 	BT_DEV_SCANNING,
 	BT_DEV_EXPLICIT_SCAN,
 
@@ -102,38 +103,12 @@ struct bt_dev {
 
 	/* Registered HCI driver */
 	struct bt_driver	*drv;
-
-/* TODO check tinycrypt define when ECC is added */
-#if defined(CONFIG_BLUETOOTH_SMP) && !defined(CONFIG_TINYCRYPT_ECC)
-	/* Public Key */
-	uint8_t			pkey[64];
-#endif
 };
 
 extern struct bt_dev bt_dev;
 #if defined(CONFIG_BLUETOOTH_SMP) || defined(CONFIG_BLUETOOTH_BREDR)
 extern const struct bt_conn_auth_cb *bt_auth;
 #endif /* CONFIG_BLUETOOTH_SMP || CONFIG_BLUETOOTH_BREDR */
-
-static inline int bt_addr_cmp(const bt_addr_t *a, const bt_addr_t *b)
-{
-	return memcmp(a, b, sizeof(*a));
-}
-
-static inline int bt_addr_le_cmp(const bt_addr_le_t *a, const bt_addr_le_t *b)
-{
-	return memcmp(a, b, sizeof(*a));
-}
-
-static inline void bt_addr_copy(bt_addr_t *dst, const bt_addr_t *src)
-{
-	memcpy(dst, src, sizeof(*dst));
-}
-
-static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
-{
-	memcpy(dst, src, sizeof(*dst));
-}
 
 static inline bool bt_addr_le_is_rpa(const bt_addr_le_t *addr)
 {

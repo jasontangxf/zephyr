@@ -37,7 +37,7 @@
 #include "conn_internal.h"
 #include "l2cap_internal.h"
 #include "smp.h"
-#include "att.h"
+#include "att_internal.h"
 #include "gatt_internal.h"
 
 #if !defined(CONFIG_BLUETOOTH_DEBUG_ATT)
@@ -571,16 +571,11 @@ static uint8_t err_to_att(int err)
 {
 	BT_DBG("%d", err);
 
-	switch (err) {
-	case -EINVAL:
-		return BT_ATT_ERR_INVALID_OFFSET;
-	case -EFBIG:
-		return BT_ATT_ERR_INVALID_ATTRIBUTE_LEN;
-	case -EACCES:
-		return BT_ATT_ERR_ENCRYPTION_KEY_SIZE;
-	default:
-		return BT_ATT_ERR_UNLIKELY;
+	if (err < 0 && err >= -0xff) {
+		return -err;
 	}
+
+	return BT_ATT_ERR_UNLIKELY;
 }
 
 struct read_type_data {
@@ -1497,6 +1492,13 @@ static uint8_t att_indicate(struct bt_att *att, struct net_buf *buf)
 	return 0;
 }
 
+static uint8_t att_confirm(struct bt_att *att, struct net_buf *buf)
+{
+	BT_DBG("");
+
+	return att_handle_rsp(att, buf->data, buf->len, 0);
+}
+
 static const struct {
 	uint8_t  op;
 	uint8_t  (*func)(struct bt_att *att, struct net_buf *buf);
@@ -1548,6 +1550,7 @@ static const struct {
 	  sizeof(struct bt_att_notify) },
 	{ BT_ATT_OP_INDICATE, att_indicate,
 	  sizeof(struct bt_att_indicate) },
+	{ BT_ATT_OP_CONFIRM, att_confirm, 0 },
 	{ BT_ATT_OP_WRITE_CMD, att_write_cmd,
 	  sizeof(struct bt_att_write_cmd) },
 	{ BT_ATT_OP_SIGNED_WRITE_CMD, att_signed_write_cmd,
@@ -1656,8 +1659,8 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan)
 
 	BT_DBG("chan %p cid 0x%04x", chan, chan->tx.cid);
 
-	memset(att, 0, sizeof(*att));
 	bt_gatt_disconnected(chan->conn);
+	memset(att, 0, sizeof(*att));
 }
 
 #if defined(CONFIG_BLUETOOTH_SMP)
@@ -1732,7 +1735,6 @@ void bt_att_init(void)
 	bt_l2cap_fixed_chan_register(&chan);
 }
 
-#if defined(CONFIG_BLUETOOTH_GATT_CLIENT)
 uint16_t bt_att_get_mtu(struct bt_conn *conn)
 {
 	struct bt_att *att;
@@ -1807,4 +1809,3 @@ void bt_att_cancel(struct bt_conn *conn)
 
 	att_req_destroy(&att->req);
 }
-#endif /* CONFIG_BLUETOOTH_GATT_CLIENT */

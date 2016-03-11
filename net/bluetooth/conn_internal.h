@@ -29,8 +29,9 @@ typedef enum __packed {
 /* bt_conn flags: the flags defined here represent connection parameters */
 enum {
 	BT_CONN_AUTO_CONNECT,
+	BT_CONN_BR_LEGACY_SECURE,	/* 16 digits legacy PIN tracker */
+	BT_CONN_USER,			/* user I/O when pairing */
 };
-
 
 struct bt_conn_le {
 	bt_addr_le_t		dst;
@@ -51,6 +52,8 @@ struct bt_conn_le {
 #if defined(CONFIG_BLUETOOTH_BREDR)
 struct bt_conn_br {
 	bt_addr_t		dst;
+	uint8_t			remote_io_capa;
+	uint8_t			remote_auth;
 };
 #endif
 
@@ -87,7 +90,7 @@ struct bt_conn {
 	bt_conn_state_t		state;
 
 	/* Handle allowing to cancel timeout fiber */
-	void			*timeout;
+	nano_thread_id_t timeout;
 
 	union {
 		struct bt_conn_le	le;

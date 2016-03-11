@@ -26,9 +26,11 @@ extern "C" {
 
 #if defined(CONFIG_BLUETOOTH_CENTRAL) || defined(CONFIG_BLUETOOTH_PERIPHERAL)
 #include <stddef.h>
+#include <sys/types.h>
 #include <misc/util.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/uuid.h>
+#include <bluetooth/att.h>
 
 /* GATT attribute permission bit field values */
 
@@ -87,24 +89,72 @@ extern "C" {
  */
 #define BT_GATT_FLUSH_SYNC			0x01
 
+/**  @def BT_GATT_ERR
+  *  @brief Construct error return value for attribute read, write and
+  *         flush callbacks.
+  *
+  *  @param _att_err ATT error code
+  *
+  *  @return Appropriate error code for the attribute callbacks.
+  *
+  */
+#define BT_GATT_ERR(_att_err)                  (-(_att_err))
+
 /** @brief GATT Attribute structure. */
 struct bt_gatt_attr {
 	/** Attribute UUID */
 	const struct bt_uuid	*uuid;
-	/** Attribute read callback */
-	int			(*read)(struct bt_conn *conn,
+
+	/** Attribute read callback
+	 *
+	 *  @param conn   The connection that is requesting to read
+	 *  @param attr   The attribute that's being read
+	 *  @param buf    Buffer to place the read result in
+	 *  @param len    Length of data to read
+	 *  @param offset Offset to start reading from
+	 *
+	 *  @return Number fo bytes read, or in case of an error
+	 *          BT_GATT_ERR() with a specific ATT error code.
+	 */
+	ssize_t			(*read)(struct bt_conn *conn,
 					const struct bt_gatt_attr *attr,
 					void *buf, uint16_t len,
 					uint16_t offset);
-	/** Attribute write callback */
-	int			(*write)(struct bt_conn *conn,
+
+	/** Attribute write callback
+	 *
+	 *  @param conn   The connection that is requesting to write
+	 *  @param attr   The attribute that's being read
+	 *  @param buf    Buffer with the data to write
+	 *  @param len    Number of bytes in the buffer
+	 *  @param offset Offset to start writing from
+	 *
+	 *  @return Number of bytes written, or in case of an error
+	 *          BT_GATT_ERR() with a specific ATT error code.
+	 */
+	ssize_t			(*write)(struct bt_conn *conn,
 					 const struct bt_gatt_attr *attr,
 					 const void *buf, uint16_t len,
 					 uint16_t offset);
-	/** Attribute flush callback */
-	int			(*flush)(struct bt_conn *conn,
+
+	/** Attribute flush callback
+	 *
+	 *  If this callback is provided (non-NULL) every write
+	 *  operation will be followed by a call to it. The expectation
+	 *  is for the attribute implementation to only commit the write
+	 *  result once this is called.
+	 *
+	 *  @param conn   The connection that is requesting to write
+	 *  @param attr   The attribute that's being read
+	 *  @param flags  Flags (BT_GATT_FLUSH_*)
+	 *
+	 *  @return Number of bytes flushed, or in case of an error
+	 *          BT_GATT_ERR() with a specific ATT error code.
+	 */
+	ssize_t			(*flush)(struct bt_conn *conn,
 					 const struct bt_gatt_attr *attr,
 					 uint8_t flags);
+
 	/** Attribute user data */
 	void			*user_data;
 	/** Attribute handle */
@@ -309,9 +359,9 @@ struct bt_gatt_attr *bt_gatt_attr_next(const struct bt_gatt_attr *attr);
  *  @return int number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-		      void *buf, uint16_t buf_len, uint16_t offset,
-		      const void *value, uint16_t value_len);
+ssize_t bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+			  void *buf, uint16_t buf_len, uint16_t offset,
+			  const void *value, uint16_t value_len);
 
 /** @brief Read Service Attribute helper.
  *
@@ -328,9 +378,9 @@ int bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
  *  @return int number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_service(struct bt_conn *conn,
-			      const struct bt_gatt_attr *attr,
-			      void *buf, uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_service(struct bt_conn *conn,
+				  const struct bt_gatt_attr *attr,
+				  void *buf, uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_SERVICE
  *  @brief Generic Service Declaration Macro.
@@ -393,9 +443,9 @@ int bt_gatt_attr_read_service(struct bt_conn *conn,
  *  @return int number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_included(struct bt_conn *conn,
-			       const struct bt_gatt_attr *attr,
-			       void *buf, uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_included(struct bt_conn *conn,
+				   const struct bt_gatt_attr *attr,
+				   void *buf, uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_INCLUDE_SERVICE
  *  @brief Include Service Declaration Macro.
@@ -427,9 +477,9 @@ int bt_gatt_attr_read_included(struct bt_conn *conn,
  *  @return number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_chrc(struct bt_conn *conn,
-			   const struct bt_gatt_attr *attr, void *buf,
-			   uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_chrc(struct bt_conn *conn,
+			       const struct bt_gatt_attr *attr, void *buf,
+			       uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_CHARACTERISTIC
  *  @brief Characteristic Declaration Macro.
@@ -481,9 +531,9 @@ struct _bt_gatt_ccc {
  *  @return number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_ccc(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_ccc(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset);
 
 /** @brief Write Client Characteristic Configuration Attribute helper.
  *
@@ -499,9 +549,9 @@ int bt_gatt_attr_read_ccc(struct bt_conn *conn,
  *  @return number of bytes written in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_write_ccc(struct bt_conn *conn,
-			   const struct bt_gatt_attr *attr, const void *buf,
-			   uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
+			       const struct bt_gatt_attr *attr, const void *buf,
+			       uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_CCC
  *  @brief Client Characteristic Configuration Declaration Macro.
@@ -537,9 +587,9 @@ int bt_gatt_attr_write_ccc(struct bt_conn *conn,
  *  @return number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_cep(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_cep(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_CEP
  *  @brief Characteristic Extended Properties Declaration Macro.
@@ -571,9 +621,9 @@ int bt_gatt_attr_read_cep(struct bt_conn *conn,
  *  @return number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_cud(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_cud(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_CUD
  *  @brief Characteristic User Format Descriptor Declaration Macro.
@@ -606,9 +656,9 @@ int bt_gatt_attr_read_cud(struct bt_conn *conn,
  *  @return number of bytes read in case of success or negative values in
  *  case of error.
  */
-int bt_gatt_attr_read_cpf(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset);
+ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset);
 
 /** @def BT_GATT_CPF
  *  @brief Characteristic Presentation Format Descriptor Declaration Macro.
@@ -680,6 +730,45 @@ int bt_gatt_attr_read_cpf(struct bt_conn *conn,
  */
 int bt_gatt_notify(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 		   const void *data, uint16_t len);
+
+/** @brief Indication complete result callback.
+ *
+ *  @param conn Connection object.
+ *  @param attr Attribute object.
+ *  @param err: 0 success, error in the other case
+ */
+typedef void (*bt_gatt_indicate_func_t)(struct bt_conn *conn,
+					const struct bt_gatt_attr *attr,
+					int err);
+
+/** @brief GATT Indicate Value parameters */
+struct bt_gatt_indicate_params {
+	/** Indicate Attribute object*/
+	const struct bt_gatt_attr *attr;
+	/** Indicate Value callback */
+	bt_gatt_indicate_func_t func;
+	/** Indicate Value data*/
+	const void *data;
+	/** Indicate Value length*/
+	uint16_t len;
+};
+
+/** @brief Indicate attribute value change.
+ *
+ *  Send an indication of attribute value change.
+ *  Note: This function should only be called if CCC is declared with
+ *  BT_GATT_CCC otherwise it cannot find a valid peer configuration.
+ *
+ *  Note: This procedure is asynchronous therefore the parameters need to
+ *  remains valid while it is active.
+ *
+ *  @param conn Connection object.
+ *  @param params Indicate parameters.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_gatt_indicate(struct bt_conn *conn,
+		     struct bt_gatt_indicate_params *params);
 
 #if defined(CONFIG_BLUETOOTH_GATT_CLIENT)
 /* Client API */
@@ -771,26 +860,40 @@ struct bt_gatt_discover_params {
 int bt_gatt_discover(struct bt_conn *conn,
 		     struct bt_gatt_discover_params *params);
 
+struct bt_gatt_read_params;
+
 /** @brief Read callback function
  *
  *  @param conn Connection object.
  *  @param err Error code.
- *  @param data Attribute value data.
+ *  @param params Read parameters used.
+ *  @param data Attribute value data. NULL means read has completed.
  *  @param length Attribute value length.
  */
 typedef uint8_t (*bt_gatt_read_func_t)(struct bt_conn *conn, int err,
+				       struct bt_gatt_read_params *params,
 				       const void *data, uint16_t length);
 
 /** @brief GATT Read parameters */
 struct bt_gatt_read_params {
-	/** Attribute handle */
-	uint16_t handle;
-	/** Attribute data offset */
-	uint16_t offset;
 	/** Read attribute callback */
 	bt_gatt_read_func_t func;
-	/** Read destroy callback */
-	void (*destroy)(void *user_data);
+	/** Handles count.
+	 * If equals to 1 single.handle and single.offset are used.
+	 * If >1 Read Multiple Characteristic Values is performed and handles
+	 * are used.
+	 */
+	size_t handle_count;
+	union {
+		struct {
+			/** Attribute handle */
+			uint16_t handle;
+			/** Attribute data offset */
+			uint16_t offset;
+		} single;
+		/** Handles to read in Read Multiple Characteristic Values */
+		uint16_t *handles;
+	};
 };
 
 /** @brief Read Attribute Value by handle
@@ -841,13 +944,24 @@ int bt_gatt_write_without_response(struct bt_conn *conn, uint16_t handle,
 				   const void *data, uint16_t length,
 				   bool sign);
 
+struct bt_gatt_subscribe_params;
+
+/** @brief Notification callback function
+ *
+ *  @param conn Connection object.
+ *  @param params Subscription parameters.
+ *  @param data Attribute value data. If NULL then subscription was removed.
+ *  @param length Attribute value length.
+ */
+typedef uint8_t (*bt_gatt_notify_func_t)(struct bt_conn *conn,
+					 struct bt_gatt_subscribe_params *params,
+					 const void *data, uint16_t length);
+
 /** @brief GATT Subscribe parameters */
 struct bt_gatt_subscribe_params {
 	bt_addr_le_t _peer;
-	/** Subscribe value callback */
-	bt_gatt_read_func_t func;
-	/** Subscribe destroy callback */
-	void (*destroy)(void *user_data);
+	/** Notification value callback */
+	bt_gatt_notify_func_t notify;
 	/** Subscribe value handle */
 	uint16_t value_handle;
 	/** Subscribe CCC handle */
@@ -863,7 +977,8 @@ struct bt_gatt_subscribe_params {
  *  Characteristic Configuration handle.
  *  If notification received subscribe value callback is called to return
  *  notified value. One may then decide whether to unsubscribe directly from
- *  this callback.
+ *  this callback. Notification callback with NULL data will not be called if
+ *  subscription was removed by this method.
  *
  *  Note: This procedure is asynchronous therefore the parameters need to
  *  remains valid while it is active.
@@ -879,7 +994,8 @@ int bt_gatt_subscribe(struct bt_conn *conn,
 /** @brief Unsubscribe Attribute Value Notification
  *
  * This procedure unsubscribe to value notification using the Client
- * Characteristic Configuration handle.
+ * Characteristic Configuration handle. Notification callback with NULL data
+ * will not be called if subscription was removed by this call.
  *
  * @param conn Connection object.
  * @param params Subscribe parameters.
@@ -894,21 +1010,6 @@ int bt_gatt_unsubscribe(struct bt_conn *conn,
  *  @param conn Connection object.
  */
 void bt_gatt_cancel(struct bt_conn *conn);
-
-/** @brief Read Multiple Attribute Values by set of handles
- *
- *  Routine to be used to retrieve set of attributes values determined by set of
- *  handles in one call.
- *
- *  @param conn Connection object.
- *  @param handles Set of valid handles to attributes.
- *  @param count Number of handles to be read.
- *  @param func User callback routine to get retrieved values.
- *
- *  @return 0 in case of success or negative value in case of error.
- */
-int bt_gatt_read_multiple(struct bt_conn *conn, const uint16_t *handles,
-			  size_t count, bt_gatt_read_func_t func);
 
 #endif /* CONFIG_BLUETOOTH_GATT_CLIENT */
 #endif /* CONFIG_BLUETOOTH_CENTRAL || CONFIG_BLUETOOTH_PERIPHERAL */

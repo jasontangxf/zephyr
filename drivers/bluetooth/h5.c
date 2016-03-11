@@ -111,9 +111,9 @@ static struct h5 {
 	uint8_t			rx_ack;
 
 	/* delayed rx ack fiber */
-	void			*ack_to;
+	nano_thread_id_t  ack_to;
 	/* delayed retransmit fiber */
-	void			*retx_to;
+	nano_thread_id_t  retx_to;
 
 	enum {
 		UNINIT,
@@ -445,7 +445,7 @@ static void h5_process_complete_packet(uint8_t *hdr)
 	}
 }
 
-void bt_uart_isr(void *unused)
+static void bt_uart_isr(struct device *unused)
 {
 	static int remaining;
 	uint8_t byte;
@@ -584,11 +584,7 @@ void bt_uart_isr(void *unused)
 
 static uint8_t h5_get_type(struct net_buf *buf)
 {
-	uint8_t type = UNALIGNED_GET((uint8_t *)buf->data);
-
-	net_buf_pull(buf, sizeof(type));
-
-	return type;
+	return net_buf_pull_u8(buf);
 }
 
 static int h5_queue(enum bt_buf_type buf_type, struct net_buf *buf)
@@ -752,16 +748,14 @@ static int h5_open(void)
 	uart_irq_rx_disable(h5_dev);
 	uart_irq_tx_disable(h5_dev);
 
-	IRQ_CONNECT(CONFIG_BLUETOOTH_UART_IRQ, CONFIG_BLUETOOTH_UART_IRQ_PRI,
-		    bt_uart_isr, 0, UART_IRQ_FLAGS);
-	irq_enable(CONFIG_BLUETOOTH_UART_IRQ);
-
 	/* Drain the fifo */
 	while (uart_irq_rx_ready(h5_dev)) {
 		unsigned char c;
 
 		uart_fifo_read(h5_dev, &c, 1);
 	}
+
+	uart_irq_callback_set(h5_dev, bt_uart_isr);
 
 	h5_init();
 

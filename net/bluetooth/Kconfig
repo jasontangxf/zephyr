@@ -29,6 +29,12 @@ if BLUETOOTH
 config BLUETOOTH_LE
 	bool "Bluetooth Low Energy (LE) support"
 	default n
+	select TINYCRYPT
+	select TINYCRYPT_AES if BLUETOOTH_SMP
+	select TINYCRYPT_AES_CMAC if BLUETOOTH_SMP
+	select TINYCRYPT_SHA256
+	select TINYCRYPT_SHA256_HMAC
+	select TINYCRYPT_SHA256_HMAC_PRNG
 	help
 	  This option enables Bluetooth Low Energy (LE) support.
 	  Currently it is mandatory whenever Bluetooth support
@@ -69,6 +75,18 @@ config  BLUETOOTH_MAX_EVT_LEN
 	  for LE is the Command Complete for Read Local Supported
 	  Commands. It is a 3 byte Command Complete header + 65 byte
 	  return parameters = 68 bytes in total.
+
+config  BLUETOOTH_RX_STACK_SIZE
+	int "Size of the receiving fiber stack"
+	default 1024
+	range 1024 65536
+	help
+	  Size of the receiving fiber stack. This is the context from
+	  which all event callbacks to the application occur. The
+	  default value is sufficient for basic operation, but if the
+	  application needs to do advanced things in its callbacks that
+	  require extra stack space, this value can be increased to
+	  accomodate for that.
 
 config	BLUETOOTH_PERIPHERAL
 	bool "Peripheral Role support"
@@ -139,6 +157,29 @@ config BLUETOOTH_SMP_SC_ONLY
 	  for services that only require Security Mode 1 Level 1 (no security).
 	  Security Mode 1 Level 4 stands for authenticated LE Secure Connections
 	  pairing with encryption. Enabling this option disables legacy pairing.
+
+config BLUETOOTH_TINYCRYPT_ECC
+	bool "Use TinyCrypt library for LE SC ECDH"
+	default n
+	select TINYCRYPT_ECC_DH
+	help
+	  If this option is set TinyCrypt library is also used for LE Secure
+	  Connections elliptic curve Diffie-Hellman key agreement. If not set
+	  controller crypto is used for ECDH and if controller doesn't support
+	  required HCI commands LE Secure Connections support will be disabled.
+
+config	BLUETOOTH_USE_DEBUG_KEYS
+	bool "Enable Security Manager Debug Mode"
+	default n
+	depends on BLUETOOTH_TINYCRYPT_ECC
+	help
+	  This option places Security Manager in a Debug Mode. In this mode
+	  predefined Diffie-Hellman private/public key pair is used as described
+	  in Core Specification Vol. 3, Part H, 2.3.5.6.1. This option should
+	  only be enabled for debugging and should never be used in production.
+	  If this option is enabled anyone is able to decipher encrypted air
+	  traffic.
+
 endif # BLUETOOTH_SMP
 
 config BLUETOOTH_L2CAP_DYNAMIC_CHANNEL

@@ -28,20 +28,52 @@
 #include "uart.h"
 #include "rpc.h"
 
+#if !defined(CONFIG_NBLE_DEBUG_GAP)
+#undef BT_DBG
+#define BT_DBG(fmt, ...)
+#endif
+
 #define NBLE_SWDIO_PIN	6
 #define NBLE_RESET_PIN	NBLE_SWDIO_PIN
 #define NBLE_BTWAKE_PIN 5
 
 static bt_ready_cb_t bt_ready_cb;
+static bt_le_scan_cb_t *scan_dev_found_cb;
+
+/* Local Bluetooth LE Device Address */
+bt_addr_le_t nble_bdaddr;
+
+#if defined(CONFIG_NBLE_DEBUG_GAP)
+static const char *bt_addr_le_str(const bt_addr_le_t *addr)
+{
+	static char str[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(addr, str, sizeof(str));
+
+	return str;
+}
+#endif /* CONFIG_BLUETOOTH_DEBUG */
+
+static void send_dm_config(void)
+{
+	struct nble_gap_sm_config_params config = {
+		.options = 1,		/* bonding */
+		.io_caps = 3,		/* no input no output */
+		.key_size = 16,		/* or 7 */
+		.oob_present = 0,	/* no oob */
+	};
+
+	nble_gap_sm_config_req(&config);
+}
 
 void on_nble_up(void)
 {
 	BT_DBG("");
 
-	ble_get_version_req(NULL);
+	send_dm_config();
 }
 
-void on_ble_get_version_rsp(const struct ble_version_response *rsp)
+void on_nble_get_version_rsp(const struct nble_version_response *rsp)
 {
 	BT_DBG("VERSION: %d.%d.%d %.20s", rsp->version.major,
 	       rsp->version.minor, rsp->version.patch,
@@ -166,7 +198,7 @@ int bt_le_adv_start(const struct bt_le_adv_param *param,
 		    const struct bt_data *ad, size_t ad_len,
 		    const struct bt_data *sd, size_t sd_len)
 {
-	struct ble_gap_adv_params params = { 0 };
+	struct nble_gap_adv_params params = { 0 };
 	int i;
 
 	if (!valid_adv_param(param)) {
@@ -220,7 +252,7 @@ send_set_param:
 	params.interval_min = param->interval_min;
 	params.type = param->type;
 
-	ble_gap_start_advertise_req(&params);
+	nble_gap_start_advertise_req(&params);
 
 	return 0;
 }
@@ -230,22 +262,91 @@ int bt_le_adv_stop(void)
 	return -ENOSYS;
 }
 
+static bool valid_le_scan_param(const struct bt_le_scan_param *param)
+{
+	if (param->type != BT_HCI_LE_SCAN_PASSIVE &&
+	    param->type != BT_HCI_LE_SCAN_ACTIVE) {
+		return false;
+	}
+
+	if (param->filter_dup != BT_HCI_LE_SCAN_FILTER_DUP_DISABLE &&
+	    param->filter_dup != BT_HCI_LE_SCAN_FILTER_DUP_ENABLE) {
+		return false;
+	}
+
+	if (param->interval < 0x0004 || param->interval > 0x4000) {
+		return false;
+	}
+
+	if (param->window < 0x0004 || param->window > 0x4000) {
+		return false;
+	}
+
+	if (param->window > param->interval) {
+		return false;
+	}
+
+	return true;
+}
+
 int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb)
 {
-	return -ENOSYS;
+	struct nble_gap_scan_params nble_params;
+
+	BT_DBG("");
+
+	/* Check that the parameters have valid values */
+	if (!valid_le_scan_param(param)) {
+		return -EINVAL;
+	}
+
+	nble_params.interval = param->interval;
+	nble_params.window = param->window;
+	nble_params.scan_type = param->type;
+	nble_params.use_whitelist = 0;
+
+	/* Check is scan already enabled */
+
+	scan_dev_found_cb = cb;
+
+	nble_gap_start_scan_req(&nble_params);
+
+	return 0;
+}
+
+void on_nble_gap_adv_report_evt(const struct nble_gap_adv_report_evt *evt,
+				const uint8_t *buf, uint8_t len)
+{
+	BT_DBG("");
+
+	if (scan_dev_found_cb) {
+		scan_dev_found_cb(&evt->addr, evt->rssi, evt->adv_type,
+				  buf, len);
+	}
 }
 
 int bt_le_scan_stop(void)
 {
-	return -ENOSYS;
+	BT_DBG("");
+
+	scan_dev_found_cb = NULL;
+
+	nble_gap_stop_scan_req();
+
+	return 0;
 }
 
-void on_ble_gap_dtm_init_rsp(void *user_data)
+void on_nble_gap_scan_start_stop_rsp(const struct nble_response *rsp)
 {
+	if (rsp->status) {
+		BT_ERR("Unable to stop scan, status %d", rsp->status);
+		return;
+	}
+
 	BT_DBG("");
 }
 
-void ble_log(const struct ble_log_s *param, char *format, uint8_t len)
+void nble_log(const struct nble_log_s *param, char *format, uint8_t len)
 {
 #if defined(CONFIG_BLUETOOTH_DEBUG)
 	/* Build meaningful output */
@@ -256,158 +357,29 @@ void ble_log(const struct ble_log_s *param, char *format, uint8_t len)
 #endif
 }
 
-void on_ble_gap_connect_evt(const struct ble_gap_connect_evt *ev)
+void on_nble_gap_read_bda_rsp(const struct nble_service_read_bda_response *rsp)
 {
-	BT_DBG("");
+	if (rsp->status) {
+		BT_ERR("Read bdaddr failed, status %d", rsp->status);
+		return;
+	}
+
+	bt_addr_le_copy(&nble_bdaddr, &rsp->bd);
+
+	BT_DBG("Local bdaddr: %s", bt_addr_le_str(&nble_bdaddr));
+
+	nble_get_version_req(NULL);
 }
 
-void on_ble_gap_disconnect_evt(const struct ble_gap_disconnect_evt *ev)
+void on_nble_gap_sm_config_rsp(struct nble_gap_sm_config_rsp *rsp)
 {
-	BT_DBG("");
-}
+	if (rsp->status) {
+		BT_ERR("SM config failed, status %d", rsp->status);
+		return;
+	}
 
-void on_ble_gap_conn_update_evt(const struct ble_gap_conn_update_evt *ev)
-{
-	BT_DBG("");
-}
+	BT_DBG("state %u", rsp->state);
 
-void on_ble_gap_sm_status_evt(const struct ble_gap_sm_status_evt *ev)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_passkey_display_evt(const struct ble_gap_sm_passkey_disp_evt *ev)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_passkey_req_evt(const struct ble_gap_sm_passkey_req_evt *ev)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_to_evt(const struct ble_gap_timout_evt *ev)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_rssi_evt(const struct ble_gap_rssi_evt *ev)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_service_read_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_read_bda_rsp(const struct ble_service_read_bda_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_disconnect_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_pairing_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_config_rsp(struct ble_gap_sm_config_rsp *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_clr_white_list_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_passkey_reply_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_connect_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_start_scan_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_stop_scan_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_cancel_connect_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_set_option_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_generic_cmd_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_conn_update_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_sm_clear_bonds_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_service_write_rsp(const struct ble_service_write_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_set_enable_config_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_set_rssi_report_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_wr_white_list_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_dbg_rsp(const struct debug_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_get_bonded_device_list_rsp(const struct ble_get_bonded_device_list_rsp *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gap_start_advertise_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-
-void on_ble_gap_stop_advertise_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
+	/* Get bdaddr queued after SM setup */
+	nble_gap_read_bda_req(NULL);
 }

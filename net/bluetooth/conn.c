@@ -37,7 +37,7 @@
 #include "l2cap_internal.h"
 #include "keys.h"
 #include "smp.h"
-#include "att.h"
+#include "att_internal.h"
 
 #if !defined(CONFIG_BLUETOOTH_DEBUG_CONN)
 #undef BT_DBG
@@ -673,6 +673,9 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 		} else if (old_state == BT_CONN_CONNECT) {
 			/* conn->err will be set in this case */
 			notify_connected(conn);
+		} else if (old_state == BT_CONN_CONNECT_SCAN && conn->err) {
+			/* this indicate LE Create Connection failed */
+			notify_connected(conn);
 		}
 
 		/* Release the reference we took for the very first
@@ -802,6 +805,7 @@ const bt_addr_le_t *bt_conn_get_dst(const struct bt_conn *conn)
 int bt_conn_get_info(const struct bt_conn *conn, struct bt_conn_info *info)
 {
 	info->type = conn->type;
+	info->role = conn->role;
 
 	switch (conn->type) {
 	case BT_CONN_TYPE_LE:
@@ -1125,6 +1129,15 @@ int bt_conn_auth_pincode_entry(struct bt_conn *conn, const char *pin)
 		return -EPERM;
 	}
 
+	/* Allow user send entered PIN to remote, then reset user state. */
+	if (!atomic_test_and_clear_bit(conn->flags, BT_CONN_USER)) {
+		return -EPERM;
+	}
+
+	if (len == 16) {
+		atomic_set_bit(conn->flags, BT_CONN_BR_LEGACY_SECURE);
+	}
+
 	return pin_code_reply(conn, pin, len);
 }
 
@@ -1137,11 +1150,11 @@ void bt_conn_pin_code_req(struct bt_conn *conn)
 			secure = true;
 		}
 
+		atomic_set_bit(conn->flags, BT_CONN_USER);
 		bt_auth->pincode_entry(conn, secure);
 	} else {
 		pin_code_neg_reply(&conn->br.dst);
 	}
-
 }
 #endif /* CONFIG_BLUETOOTH_BREDR */
 
@@ -1186,6 +1199,11 @@ int bt_conn_auth_cancel(struct bt_conn *conn)
 #endif /* CONFIG_BLUETOOTH_SMP */
 #if defined(CONFIG_BLUETOOTH_BREDR)
 	if (conn->type == BT_CONN_TYPE_BR) {
+		/* Allow user cancel authentication, then reset user state. */
+		if (!atomic_test_and_clear_bit(conn->flags, BT_CONN_USER)) {
+			return -EPERM;
+		}
+
 		return pin_code_neg_reply(&conn->br.dst);
 	}
 #endif /* CONFIG_BLUETOOTH_BREDR */

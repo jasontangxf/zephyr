@@ -15,21 +15,29 @@
  */
 
 #include <errno.h>
+#include <atomic.h>
 #include <misc/byteorder.h>
 
 #include <bluetooth/gatt.h>
 #include <bluetooth/log.h>
 
+#include "conn.h"
+#include "conn_internal.h"
 #include "gatt_internal.h"
+
+#if !defined(CONFIG_BLUETOOTH_DEBUG_GATT)
+#undef BT_DBG
+#define BT_DBG(fmt, ...)
+#endif
 
 #define NBLE_BUF_SIZE	384
 
-struct ble_gatt_service {
+struct nble_gatt_service {
 	const struct bt_gatt_attr *attrs;
 	uint16_t attr_count;
 };
 
-static struct ble_gatt_service svc_db[BLE_GATTS_MAX_SERVICES];
+static struct nble_gatt_service svc_db[BLE_GATTS_MAX_SERVICES];
 static uint8_t svc_count;
 
 /**
@@ -105,7 +113,7 @@ static int attr_read(struct bt_gatt_attr *attr, uint8_t *data, size_t len)
 
 int bt_gatt_register(struct bt_gatt_attr *attrs, size_t count)
 {
-	struct ble_gatt_register_req param;
+	struct nble_gatt_register_req param;
 	size_t i;
 	/* TODO: Replace the following with net_buf */
 	uint8_t attr_table[NBLE_BUF_SIZE];
@@ -126,7 +134,7 @@ int bt_gatt_register(struct bt_gatt_attr *attrs, size_t count)
 
 	for (i = 0; i < count; i++) {
 		struct bt_gatt_attr *attr = &attrs[i];
-		struct ble_gatt_attr *att;
+		struct nble_gatt_attr *att;
 		int err;
 
 		if (attr_table_size + sizeof(*att) > sizeof(attr_table)) {
@@ -157,13 +165,13 @@ int bt_gatt_register(struct bt_gatt_attr *attrs, size_t count)
 		       att->data_size);
 	}
 
-	ble_gatt_register_req(&param, attr_table, attr_table_size);
+	nble_gatt_register_req(&param, attr_table, attr_table_size);
 	return 0;
 }
 
-void on_ble_gatt_register_rsp(const struct ble_gatt_register_rsp *rsp,
-			      const struct ble_gatt_attr_handles *handles,
-			      uint8_t len)
+void on_nble_gatt_register_rsp(const struct nble_gatt_register_rsp *rsp,
+			       const struct nble_gatt_attr_handles *handles,
+			       uint8_t len)
 {
 	BT_DBG("status %u", rsp->status);
 
@@ -207,9 +215,9 @@ struct bt_gatt_attr *bt_gatt_attr_next(const struct bt_gatt_attr *attr)
 	return NULL;
 }
 
-int bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-		      void *buf, uint16_t buf_len, uint16_t offset,
-		      const void *value, uint16_t value_len)
+ssize_t bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+			  void *buf, uint16_t buf_len, uint16_t offset,
+			  const void *value, uint16_t value_len)
 {
 	uint16_t len;
 
@@ -221,7 +229,7 @@ int bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	}
 
 	if (offset > value_len) {
-		return -EINVAL;
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 	}
 
 	len = min(buf_len, value_len - offset);
@@ -231,9 +239,9 @@ int bt_gatt_attr_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	return len;
 }
 
-int bt_gatt_attr_read_service(struct bt_conn *conn,
-			      const struct bt_gatt_attr *attr,
-			      void *buf, uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_service(struct bt_conn *conn,
+				  const struct bt_gatt_attr *attr,
+				  void *buf, uint16_t len, uint16_t offset)
 {
 	struct bt_uuid *uuid = attr->user_data;
 
@@ -248,11 +256,11 @@ int bt_gatt_attr_read_service(struct bt_conn *conn,
 				 BT_UUID_128(uuid)->val, 16);
 }
 
-int bt_gatt_attr_read_included(struct bt_conn *conn,
+ssize_t bt_gatt_attr_read_included(struct bt_conn *conn,
 			       const struct bt_gatt_attr *attr,
 			       void *buf, uint16_t len, uint16_t offset)
 {
-	return -ENOSYS;
+	return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
 }
 
 struct gatt_chrc {
@@ -264,9 +272,9 @@ struct gatt_chrc {
 	};
 } __packed;
 
-int bt_gatt_attr_read_chrc(struct bt_conn *conn,
-			   const struct bt_gatt_attr *attr, void *buf,
-			   uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_chrc(struct bt_conn *conn,
+			       const struct bt_gatt_attr *attr, void *buf,
+			       uint16_t len, uint16_t offset)
 {
 	struct bt_gatt_chrc *chrc = attr->user_data;
 	struct gatt_chrc pdu;
@@ -290,26 +298,26 @@ int bt_gatt_attr_read_chrc(struct bt_conn *conn,
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, &pdu, value_len);
 }
 
-int bt_gatt_attr_read_ccc(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_ccc(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset)
 {
-	return -ENOSYS;
+	return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
 }
 
-int bt_gatt_attr_write_ccc(struct bt_conn *conn,
-			   const struct bt_gatt_attr *attr, const void *buf,
-			   uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
+			       const struct bt_gatt_attr *attr,
+			       const void *buf, uint16_t len, uint16_t offset)
 {
 	struct _bt_gatt_ccc *ccc = attr->user_data;
 	const uint16_t *data = buf;
 
 	if (offset > sizeof(*data)) {
-		return -EINVAL;
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 	}
 
 	if (offset + len > sizeof(*data)) {
-		return -EFBIG;
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
 	}
 
 	/* We expect to receive this only when the has really changed */
@@ -324,9 +332,9 @@ int bt_gatt_attr_write_ccc(struct bt_conn *conn,
 	return len;
 }
 
-int bt_gatt_attr_read_cep(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_cep(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset)
 {
 	struct bt_gatt_cep *value = attr->user_data;
 	uint16_t props = sys_cpu_to_le16(value->properties);
@@ -335,31 +343,43 @@ int bt_gatt_attr_read_cep(struct bt_conn *conn,
 				 sizeof(props));
 }
 
-int bt_gatt_attr_read_cud(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_cud(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset)
 {
-	return -ENOSYS;
+	return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
 }
 
-int bt_gatt_attr_read_cpf(struct bt_conn *conn,
-			  const struct bt_gatt_attr *attr, void *buf,
-			  uint16_t len, uint16_t offset)
+ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
+			      const struct bt_gatt_attr *attr, void *buf,
+			      uint16_t len, uint16_t offset)
 {
-	return -ENOSYS;
+	return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
 }
 
 int bt_gatt_notify(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 		   const void *data, uint16_t len)
 {
-	struct ble_gatt_send_notif_ind_params notif;
+	struct nble_gatt_send_notif_ind_params notif;
 
-	notif.conn_handle = 0xFFFF;
+	if (conn) {
+		notif.conn_handle = conn->handle;
+	} else {
+		notif.conn_handle = 0xffff;
+	}
+
 	notif.params.attr = (struct bt_gatt_attr *)attr;
 	notif.params.offset = 0;
+	notif.cback = NULL;
 
-	ble_gatt_send_notif_req(&notif, (uint8_t *)data, len);
+	nble_gatt_send_notif_req(&notif, (uint8_t *)data, len);
 	return 0;
+}
+
+int bt_gatt_indicate(struct bt_conn *conn,
+		     struct bt_gatt_indicate_params *params)
+{
+	return -ENOSYS;
 }
 
 int bt_gatt_exchange_mtu(struct bt_conn *conn, bt_gatt_rsp_func_t func)
@@ -370,8 +390,260 @@ int bt_gatt_exchange_mtu(struct bt_conn *conn, bt_gatt_rsp_func_t func)
 int bt_gatt_discover(struct bt_conn *conn,
 		     struct bt_gatt_discover_params *params)
 {
-	return -ENOSYS;
+	struct nble_discover_params discover_params;
+
+	if (!conn || !params || !params->func || !params->start_handle ||
+	    !params->end_handle || params->start_handle > params->end_handle) {
+		return -EINVAL;
+	}
+
+	if (conn->gatt_discover) {
+		return -EBUSY;
+	}
+
+	BT_DBG("conn %p start 0x%04x end 0x%04x", conn, params->start_handle,
+	       params->end_handle);
+
+	switch (params->type) {
+	case BT_GATT_DISCOVER_PRIMARY:
+	case BT_GATT_DISCOVER_INCLUDE:
+	case BT_GATT_DISCOVER_CHARACTERISTIC:
+	case BT_GATT_DISCOVER_DESCRIPTOR:
+		discover_params.conn_handle = conn->handle;
+		discover_params.type = params->type;
+		/* Always copy a full 128 bit UUID */
+		memcpy(&discover_params.uuid, BT_UUID_128(params->uuid),
+		       sizeof(discover_params.uuid));
+		discover_params.handle_range.start_handle = params->start_handle;
+		discover_params.handle_range.end_handle = params->end_handle;
+
+		conn->gatt_discover = params;
+
+		nble_gattc_discover_req(&discover_params, NULL);
+		break;
+	default:
+		BT_ERR("Unknown params type %u", params->type);
+		return -EINVAL;
+	}
+
+	return 0;
 }
+
+static uint16_t parse_include(struct bt_conn *conn, const uint8_t *data,
+			      uint8_t len)
+{
+	struct bt_gatt_discover_params *params = conn->gatt_discover;
+	uint16_t end_handle = 0;
+	int i;
+
+	for (i = 0; len > 0; i++) {
+		const struct nble_gattc_included *att = (void *)data;
+		struct bt_gatt_attr *attr = NULL;
+		struct bt_gatt_include gatt_include;
+
+		gatt_include.start_handle = att->range.start_handle;
+		gatt_include.end_handle = att->range.end_handle;
+		end_handle = gatt_include.end_handle;
+
+		BT_DBG("start 0x%04x end 0x%04x", att->range.start_handle,
+		       att->range.end_handle);
+
+		/*
+		 * 4.5.1 If the service UUID is a 16-bit Bluetooth UUID
+		 *  it is also returned in the response.
+		 */
+		switch (att->uuid.uuid.type) {
+		case BT_UUID_TYPE_16:
+			gatt_include.uuid = &att->uuid.uuid;
+			break;
+		case BT_UUID_TYPE_128:
+			/* Data is not available at this point */
+			break;
+		}
+
+		attr = (&(struct bt_gatt_attr)
+			BT_GATT_INCLUDE_SERVICE(&gatt_include));
+		attr->handle = att->handle;
+
+		data += sizeof(*att);
+		len -= sizeof(*att);
+
+		if (params->func(conn, attr, params) == BT_GATT_ITER_STOP) {
+			return 0;
+		}
+	}
+
+	return end_handle;
+}
+
+static uint16_t parse_service(struct bt_conn *conn, const uint8_t *data,
+			      uint8_t len)
+{
+	struct bt_gatt_discover_params *params = conn->gatt_discover;
+	uint16_t end_handle = 0;
+	int i;
+
+	for (i = 0; len > 0; i++) {
+		const struct nble_gattc_primary *att = (void *)data;
+		struct bt_gatt_service gatt_service;
+		struct bt_gatt_attr *attr = NULL;
+
+		gatt_service.end_handle = att->range.end_handle;
+		gatt_service.uuid = params->uuid;
+		end_handle = gatt_service.end_handle;
+
+		attr = (&(struct bt_gatt_attr)
+			BT_GATT_PRIMARY_SERVICE(&gatt_service));
+		attr->handle = att->handle;
+
+		data += sizeof(*att);
+		len -= sizeof(*att);
+
+		if (params->func(conn, attr, params) == BT_GATT_ITER_STOP) {
+			return 0;
+		}
+	}
+
+	return end_handle;
+}
+
+static uint16_t parse_characteristic(struct bt_conn *conn, const uint8_t *data,
+				     uint8_t len)
+{
+	struct bt_gatt_discover_params *params = conn->gatt_discover;
+	uint16_t end_handle = 0;
+	int i;
+
+	for (i = 0; len > 0; i++) {
+		const struct nble_gattc_characteristic *att = (void *)data;
+		struct bt_gatt_attr *attr = NULL;
+
+		attr = (&(struct bt_gatt_attr)
+			BT_GATT_CHARACTERISTIC(&att->uuid.uuid, att->prop));
+		attr->handle = att->handle;
+		end_handle = att->handle;
+
+		data += sizeof(*att);
+		len -= sizeof(*att);
+
+		if (params->func(conn, attr, params) == BT_GATT_ITER_STOP) {
+			return 0;
+		}
+	}
+
+	return end_handle;
+}
+
+static uint16_t parse_descriptor(struct bt_conn *conn, const uint8_t *data,
+				 uint8_t len)
+{
+	struct bt_gatt_discover_params *params = conn->gatt_discover;
+	uint16_t end_handle = 0;
+	int i;
+
+	for (i = 0; len > 0; i++) {
+		const struct nble_gattc_descriptor *att = (void *)data;
+		struct bt_gatt_attr *attr = NULL;
+
+		attr = (&(struct bt_gatt_attr)
+			BT_GATT_DESCRIPTOR(&att->uuid.uuid, 0, NULL, NULL, NULL));
+		attr->handle = att->handle;
+		end_handle = att->handle;
+
+		data += sizeof(*att);
+		len -= sizeof(*att);
+
+		if (params->func(conn, attr, params) == BT_GATT_ITER_STOP) {
+			return 0;
+		}
+	}
+
+	return end_handle;
+}
+
+
+void on_nble_gattc_discover_rsp(const struct nble_gattc_disc_rsp *rsp,
+				const uint8_t *data, uint8_t data_len)
+{
+	uint16_t end_handle = 0;
+	struct bt_gatt_discover_params *params;
+	struct bt_conn *conn;
+	int status;
+
+	conn = bt_conn_lookup_handle(rsp->conn_handle);
+	if (!conn) {
+		BT_ERR("Unable to find conn for handle %u", rsp->conn_handle);
+		return;
+	}
+
+	params = conn->gatt_discover;
+
+	/* Status maybe error or indicate end of discovery */
+	if (rsp->status) {
+		BT_DBG("status %d", rsp->status);
+		goto done;
+	}
+
+	BT_DBG("conn %p handle %u status %d len %u", conn, conn->handle,
+	       rsp->status, data_len);
+
+	switch (rsp->type) {
+	case BT_GATT_DISCOVER_INCLUDE:
+		end_handle = parse_include(conn, data, data_len);
+		break;
+	case BT_GATT_DISCOVER_PRIMARY:
+		end_handle = parse_service(conn, data, data_len);
+		break;
+	case BT_GATT_DISCOVER_CHARACTERISTIC:
+		end_handle = parse_characteristic(conn, data, data_len);
+		break;
+	case BT_GATT_DISCOVER_DESCRIPTOR:
+		end_handle = parse_descriptor(conn, data, data_len);
+		break;
+	default:
+		BT_ERR("Wrong discover type %d", rsp->type);
+		bt_conn_unref(conn);
+		return;
+	}
+
+	if (!end_handle) {
+		goto stop;
+	}
+
+	/* Stop if end_handle is over the range */
+	if (end_handle >= params->end_handle) {
+		BT_WARN("Handle goes over the range: 0x%04x >= 0x%04x",
+			end_handle, params->end_handle);
+		goto done;
+	}
+
+	/* Continue discovery from last found handle */
+	params->start_handle = end_handle;
+	if (params->start_handle < UINT16_MAX) {
+		params->start_handle++;
+	}
+
+	/* This pointer would keep new params set in the function below */
+	conn->gatt_discover = NULL;
+
+	status = bt_gatt_discover(conn, params);
+	if (status) {
+		BT_ERR("Unable to continue discovering, status %d", status);
+		goto done;
+	}
+
+	bt_conn_unref(conn);
+	return;
+
+done:
+	/* End of discovery */
+	params->func(conn, NULL, params);
+
+stop:
+	conn->gatt_discover = NULL;
+	bt_conn_unref(conn);
+}
+
 
 int bt_gatt_read(struct bt_conn *conn, struct bt_gatt_read_params *params)
 {
@@ -405,44 +677,23 @@ int bt_gatt_unsubscribe(struct bt_conn *conn,
 
 void bt_gatt_cancel(struct bt_conn *conn)
 {
-}
-
-int bt_gatt_read_multiple(struct bt_conn *conn, const uint16_t *handles,
-			  size_t count, bt_gatt_read_func_t func)
-{
-	return -ENOSYS;
-}
-
-void on_ble_gattc_write_rsp(const struct ble_gattc_write_rsp *ev,
-			    void *priv)
-{
 	BT_DBG("");
 }
 
-void on_ble_gattc_read_rsp(const struct ble_gattc_read_rsp *ev,
-			   uint8_t *data, uint8_t data_len, void *priv)
-{
-	BT_DBG("");
-}
-
-void on_ble_gattc_value_evt(const struct ble_gattc_value_evt *ev,
-		uint8_t *buf, uint8_t buflen)
-{
-	BT_DBG("");
-}
-
-void on_ble_gatts_write_evt(const struct ble_gatt_wr_evt *evt,
-			    const uint8_t *buf, uint8_t buflen)
+void on_nble_gatts_write_evt(const struct nble_gatt_wr_evt *evt,
+			     const uint8_t *buf, uint8_t buflen)
 {
 	const struct bt_gatt_attr *attr = evt->attr;
-	struct ble_gatts_rw_reply_params reply_data;
+	struct nble_gatts_rw_reply_params reply_data;
+
+	BT_DBG("handle 0x%04x buf %p len %u", attr->handle, buf, buflen);
 
 	if (attr->write) {
 		reply_data.status = attr->write(NULL, attr, buf, buflen,
 						evt->offset);
+	} else {
+		reply_data.status = -EINVAL;
 	}
-
-	BT_DBG("handle 0x%04x buf %p len %u", attr->handle, buf, buflen);
 
 	if (evt->reply) {
 		reply_data.conn_handle = evt->conn_handle;
@@ -454,45 +705,19 @@ void on_ble_gatts_write_evt(const struct ble_gatt_wr_evt *evt,
 	}
 }
 
-void on_ble_gatts_get_attribute_value_rsp(const struct ble_gatts_attribute_response *par,
-					  uint8_t *data, uint8_t length)
+void on_nble_gatts_read_evt(const struct nble_gatt_rd_evt *evt)
 {
-	BT_DBG("");
-}
-
-void on_ble_gattc_discover_rsp(const struct ble_gattc_disc_rsp *rsp,
-			       const uint8_t *data, uint8_t len)
-{
-	BT_DBG("");
-}
-
-void on_ble_gatts_send_svc_changed_rsp(const struct ble_core_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gatts_set_attribute_value_rsp(const struct ble_gatts_attribute_response *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gatts_send_notif_ind_rsp(const struct ble_gatt_notif_ind_rsp *par)
-{
-	BT_DBG("");
-}
-
-void on_ble_gatts_read_evt(const struct nble_gatt_rd_evt *evt)
-{
-	struct ble_gatts_rw_reply_params reply_data;
+	struct nble_gatts_rw_reply_params reply_data;
 	const struct bt_gatt_attr *attr;
 	/* TODO: Replace the following with net_buf */
 	uint8_t data[NBLE_BUF_SIZE];
 
 	reply_data.status = -EACCES;
+	memset(data, 0, sizeof(data));
 
 	attr = evt->attr;
 
-	BT_DBG("read %p", attr);
+	BT_DBG("handle %p", attr);
 
 	if (attr->read) {
 		reply_data.status = attr->read(NULL, attr, data, sizeof(data),
