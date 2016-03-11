@@ -70,7 +70,12 @@ SECTION_FUNC(TEXT, _firq_enter)
 
 	/* save LP_START/LP_COUNT/LP_END variables */
 	mov_s r1, _nanokernel
-
+#ifdef CONFIG_ARC_SC
+	/* disable stack checking */
+	lr r2, [_ARC_V2_STATUS32]
+	bclr r2, r2, _ARC_V2_STATUS32_SC_BIT
+	kflag r2
+#endif
 	/* cannot store lp_count directly to memory */
 	mov r2, lp_count
 	st lp_count, [r1, __tNANO_firq_regs_OFFSET + __tFirqRegs_lp_count_OFFSET]
@@ -184,6 +189,13 @@ _firq_reschedule:
 	ld r3, [r2, __tTCS_link_OFFSET]
 	st r3, [r1, __tNANO_fiber_OFFSET]
 
+#ifdef CONFIG_ARC_SC
+	/* Use stack top and down registers from restored context */
+	add r3, r2, __tTCS_NOFLOAT_SIZEOF
+	sr r3, [_ARC_V2_KSTACK_TOP]
+	ld r3, [r2, __tTCS_stack_top_OFFSET]
+	sr r3, [_ARC_V2_KSTACK_BASE]
+#endif
 	/*
 	 * _load_callee_saved_regs expects incoming thread in r2.
 	 * _load_callee_saved_regs restores the stack pointer.
