@@ -97,28 +97,9 @@ void *ipc_uart_channel_open(int channel, int (*cb)(int chan, int request,
 #define IPC_REQUEST_ALLOC_PORT         0x10
 
 /**
- * Registers a service.
- *
- * This request is always flowing from a slave to the master.
- */
-#define IPC_REQUEST_REGISTER_SERVICE   0x11
-
-/**
- * Unregisters a service.
- */
-#define IPC_REQUEST_DEREGISTER_SERVICE 0x12
-
-/**
  * The message is for test commands engine.
  */
 #define IPC_REQUEST_REG_TCMD_ENGINE    0x13
-
-/**
- * Registers a Service Manager Proxy to the Service Manager.
- *
- * This request always flow from a slave to the master.
- */
-#define IPC_REQUEST_REGISTER_PROXY     0x14
 
 /**
  * Notifies a panic (for log dump).
