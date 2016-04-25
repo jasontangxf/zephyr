@@ -1,0 +1,65 @@
+# Kconfig - NBLE configuration options
+
+#
+# Copyright (c) 2016 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+config NBLE_CURIE
+	bool "Support for custom Nordic Semiconductor BLE protocol"
+	default n
+	select BLUETOOTH_PERIPHERAL
+	select BLUETOOTH_CENTRAL
+	select BLUETOOTH_GATT_CLIENT
+	select BLUETOOTH_SMP
+	help
+	  Enables support for using Nordic Semiconductor nRF51 Bluetooth
+	  LE chips with a custom firmware. The API for this is a subset of
+	  the normal Bluetooth API (include/bluetooth/*.h). This driver can
+	  only be enabled if CONFIG_BLUETOOTH has not been enabled.
+
+	  A fundamental assumption that the driver makes is that it is
+	  run on an architecture with the same ABI (e.g. struct packing
+	  & endianess) as the nRF51 chip. The driver cannot be used on
+	  any architecture that doesn't fulfill this requirement.
+
+config	BLUETOOTH_MAX_CONN
+	int
+	default 6
+
+config BT_GATT_BLE_MAX_SERVICES
+	int "Maximum number BLE GATT services allowed to be registered"
+	default 7
+
+choice
+	prompt "Device IO security capabilities"
+	depends on BLUETOOTH_SMP
+	default BLUETOOTH_IO_NO_INPUT_OUTPUT
+
+config BLUETOOTH_IO_KEYBOARD_DISPLAY
+	bool "Device with keyboard and display"
+
+config BLUETOOTH_IO_DISPLAY
+	bool "Device with display only"
+
+config BLUETOOTH_IO_KEYBOARD
+	bool "Device with keyboard only"
+
+config BLUETOOTH_IO_DISPLAY_YESNO
+	bool "Device with display and yes/no input"
+
+config BLUETOOTH_IO_NO_INPUT_OUTPUT
+	bool "Device with no input and no output"
+
+endchoice

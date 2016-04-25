@@ -67,4 +67,6 @@ source "drivers/qmsi/Kconfig"
 
 source "drivers/nble/Kconfig"
 
+source "drivers/nble_curie/Kconfig"
+
 endmenu

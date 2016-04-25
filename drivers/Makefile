@@ -21,4 +21,5 @@ obj-$(CONFIG_RTC) += rtc/
 obj-$(CONFIG_CLOCK_CONTROL) += clock_control/
 obj-$(CONFIG_IPM) += ipm/
 obj-$(CONFIG_NBLE) += nble/
+obj-$(CONFIG_NBLE_CURIE) += nble_curie/
 obj-y += aio/
