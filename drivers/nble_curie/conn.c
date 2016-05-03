@@ -559,11 +559,11 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 	/* Timeout is handled by application timer */
 	/* forced to none currently (no whitelist support) */
 	struct nble_gap_adv_params params = {
-			params.interval_max = param->interval_max,
-			params.interval_min = param->interval_min,
-			params.type = param->type,
-			params.timeout = 0,
-			params.filter_policy = 0
+		.interval_max = param->interval_max,
+		.interval_min = param->interval_min,
+		.type = param->type,
+		.timeout = 0,
+		.filter_policy = 0
 	};
 
 	bt_addr_le_copy(&params.peer_bda, peer);
